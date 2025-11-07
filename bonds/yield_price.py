@@ -1,8 +1,7 @@
 from dataclasses import dataclass
-import matplotlib.pyplot as plt
-from typing import List
 
-from math_utils.newton_raphson import bisect
+from ..math.newton_raphson import bisect
+from ..cf.cash_flow import CashFlow
 
 @dataclass
 class Bond:
@@ -11,61 +10,31 @@ class Bond:
     periods: int
     m: int
 
-def present_value(
-    y: float,
-    cash_flow: List[float]
-):
-    price = 0
-    for k in range(len(cash_flow)):
-        price += cash_flow[k] * 1 / (1 + y) ** (k + 1)
-    return price
+    def cash_flow(self) -> CashFlow:
+        cash_flow = [
+            CashFlow.Point(k, self.coupon_rate / self.m * self.face_value) for k in range(self.periods)
+        ]
+        cash_flow[-1].value += self.face_value
+        return CashFlow(cash_flow)
 
-def duration(
-    y: float,
-    cash_flow: List[float]
-):
-    duration = 0
-    for k in range(len(cash_flow)):
-        duration += cash_flow[k] * 1 / (1 + y) ** (k + 1) * k
-    duration /= present_value(y, cash_flow)
-    return duration
+    def present_value(self, y: float) -> float:
+        return self.cash_flow().present_value(y / self.m)
 
-def bond_cash_flow(
-    bond: Bond
-):
-    cash_flow = []
-    for _ in range(bond.periods):
-        payment = bond.coupon_rate / bond.m * bond.face_value
-        cash_flow.append(payment)
-    cash_flow[-1] += bond.face_value
-    return cash_flow
+    def yield_from_price(self, p: float) -> float:
+        return bisect(
+            lambda y: self.present_value(y) - p,
+            0, 1, 10 ** (-9)
+        )
 
+    def duration(self, y: float) -> float:
+        return self.cash_flow().duration(y / self.m)
 
-def price_from_yield(
-    y: float,
-    bond: Bond
-):
-    cash_flow = bond_cash_flow(bond)
-    return present_value(y / bond.m, cash_flow)
-
-def yield_from_price(
-    p: float,
-    bond: Bond
-):
-    return bisect(
-        lambda y: price_from_yield(y, bond) - p,
-        0, 1, 10 ** (-9)
-    ) 
-
-def modified_duration(
-    y: float,
-    bond: Bond
-):
-    cash_flow = bond_cash_flow(bond)
-    _duration = duration(y, cash_flow) / bond.m
-    factor = 1 / (1 + y / bond.m)  
-    return factor * _duration
+    def modified_duration(self, y: float) -> float:
+        _duration = self.duration(y) / self.m
+        factor = 1 / (1 + y / self.m)
+        return factor * _duration
 
 example_bond = Bond(0.01, 100, 20, 2)
 
-print(modified_duration(0.05, example_bond))
+print(example_bond.yield_from_price(90))
+print(example_bond.modified_duration(0.05))
