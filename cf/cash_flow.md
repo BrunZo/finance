@@ -2,8 +2,8 @@
 tags:
   - finance
 section: "1.1"
-alia: F1
 ---
+
 **Definition.** A **cash flow** is a time series of incoming and outgoing money. Thus, a cash flow can be modeled as a finite sequence of real numbers $(x_0, x_1, \ldots, x_n)$. Different investments can have different cash flows.
 
 Examples:
