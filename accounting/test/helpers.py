@@ -1,5 +1,6 @@
 """Shared helpers for test examples."""
 
+from decimal import Decimal
 import os
 import tempfile
 from contextlib import contextmanager
@@ -52,3 +53,7 @@ def temporary_ledger_db() -> Iterator[Session]:
     finally:
         if os.path.exists(path):
             os.remove(path)
+
+
+def test_decimal(x: Decimal, y: Decimal) -> None:
+    assert x == y, f"Expected {y} but found {x}"

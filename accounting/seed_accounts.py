@@ -34,3 +34,16 @@ def seed_accounts(session: Session) -> int:
             created += 1
     session.commit()
     return created
+
+
+def create_account(session: Session, account_type: AccountType, tag: str) -> Account:
+    """Create an account if it does not exist."""
+    existing = (
+        session.query(Account)
+        .filter(Account.account_type == account_type, Account.tag == tag)
+        .first()
+    )
+    if existing is None:
+        session.add(Account(account_type=account_type, tag=tag))
+        session.commit()
+    return existing
