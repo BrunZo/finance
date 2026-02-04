@@ -67,7 +67,9 @@ class Split(Base):
 
 def _check_splits_balance(splits: list[tuple[int, Decimal]]) -> None:
     """Raise ValueError if sum of amounts is not zero (invalid double-entry transaction)."""
-    return sum([amt for _, amt in splits])
+    total = sum([amt for _, amt in splits])
+    if total != 0:
+        raise ValueError(f"Splits must sum to zero, got {total}")
 
 
 def _check_splits_account_ids(splits: list[tuple[int, Decimal]], session) -> None:
