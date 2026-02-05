@@ -1,0 +1,141 @@
+"""
+Transaction services: high-level operations for transfer/split patterns.
+Amounts are positive; signs applied internally (debit +, credit -).
+"""
+
+from decimal import Decimal
+from typing import Sequence
+
+from sqlalchemy.orm import Session
+
+from accounting.models import AccountType, create_transaction
+from accounting.rest_api.accounts import services as account_services
+
+
+def _receivable_tag(friend_name: str | None) -> str:
+    if not (friend_name and friend_name.strip()):
+        return "receivables"
+    return f"receivables:{friend_name.strip()}"
+
+
+def _payable_tag(friend_name: str | None) -> str:
+    if not (friend_name and friend_name.strip()):
+        return "payables"
+    return f"payables:{friend_name.strip()}"
+
+
+def get_or_create_receivable_account(
+    session: Session,
+    friend_name: str | None = None,
+) -> int:
+    tag = _receivable_tag(friend_name)
+    acc = account_services.get_or_create_account(session, AccountType.ASSET, tag)
+    return acc.id
+
+
+def get_or_create_payable_account(
+    session: Session,
+    friend_name: str | None = None,
+) -> int:
+    tag = _payable_tag(friend_name)
+    acc = account_services.get_or_create_account(session, AccountType.LIABILITY, tag)
+    return acc.id
+
+
+def create_from_splits(
+    session: Session,
+    description: str,
+    splits: list[tuple[int, Decimal]],
+) -> None:
+    """Create a transaction from raw splits. Amounts: positive=debit, negative=credit."""
+    create_transaction(session, description, splits)
+
+
+def create_expense(
+    session: Session,
+    description: str,
+    source_account_id: int,
+    expense_account_id: int,
+    amount: Decimal,
+) -> None:
+    """Record an expense you paid yourself: money leaves source, goes to expense."""
+    create_transaction(
+        session,
+        description,
+        [
+            (source_account_id, -amount),
+            (expense_account_id, amount),
+        ],
+    )
+
+
+def pay_for_many(
+    session: Session,
+    description: str,
+    source_account_id: int,
+    expense_account_id: int,
+    total_amount: Decimal,
+    my_share: Decimal,
+    friend_amounts: Sequence[tuple[str | None, Decimal]],
+) -> None:
+    splits: list[tuple[int, Decimal]] = [
+        (source_account_id, -total_amount),
+        (expense_account_id, my_share),
+    ]
+    for friend_name, amount in friend_amounts:
+        if amount <= 0:
+            continue
+        recv_id = get_or_create_receivable_account(session, friend_name or None)
+        splits.append((recv_id, amount))
+    create_transaction(session, description, splits)
+
+
+def being_paid_for(
+    session: Session,
+    description: str,
+    liability_account_id: int,
+    expense_account_id: int,
+    my_share: Decimal,
+) -> None:
+    create_transaction(
+        session,
+        description,
+        [
+            (liability_account_id, -my_share),
+            (expense_account_id, my_share),
+        ],
+    )
+
+
+def receive_receivable(
+    session: Session,
+    description: str,
+    amount: Decimal,
+    from_receivable_account_id: int,
+    to_bank_account_id: int,
+) -> None:
+    create_transaction(
+        session,
+        description,
+        [
+            (to_bank_account_id, amount),
+            (from_receivable_account_id, -amount),
+        ],
+    )
+
+
+def pay_payable(
+    session: Session,
+    description: str,
+    amount: Decimal,
+    payable_account_id: int,
+    from_bank_account_id: int,
+) -> None:
+    create_transaction(
+        session,
+        description,
+        [
+            (from_bank_account_id, -amount),
+            (payable_account_id, amount),
+        ],
+    )

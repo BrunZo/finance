@@ -1,66 +1,58 @@
 """
 Example: post a few transactions and assert account balances (sum of splits per account).
-Shows that double-entry keeps every account's balance consistent.
+Same scenario as before, now via the REST API with an ephemeral DB.
 """
 
 from decimal import Decimal
-from typing import List
 
-from sqlalchemy import func
-
-from accounting.models import AccountType, Split, create_transaction
-from accounting.reports import get_cleaned_expenses
-from accounting.test.helpers import get_account_id, temporary_ledger_db
-
-
-def get_balance(session, account_id: int) -> Decimal:
-    """Sum of all split amounts for the given account."""
-    result = session.query(func.coalesce(func.sum(Split.amount), 0)).filter(
-        Split.account_id == account_id
-    ).scalar()
-    return Decimal(str(result))
+from accounting.test.api_helpers import (
+    temporary_api_client,
+    create_account,
+    get_balance,
+    post_splits,
+    get_expenses_report,
+)
 
 
 def main() -> None:
-    with temporary_ledger_db() as session:
-        bank = get_account_id(session, AccountType.ASSET, "bank")
-        reimbursements = get_account_id(session, AccountType.ASSET, "reimbursements")
-        dining = get_account_id(session, AccountType.EXPENSE, "dining")
+    with temporary_api_client() as client:
+        bank = create_account(client, "asset", "bank")
+        receivables = create_account(client, "asset", "receivables")
+        dining = create_account(client, "expense", "dining")
 
         # Dinner 150 (you 50, friend 50, friend 50)
-        create_transaction(
-            session,
+        post_splits(
+            client,
             "Dinner with friends",
             [
-                (bank, -Decimal("150")),
-                (dining, Decimal("50")),
-                (reimbursements, Decimal("100")),
+                (bank["id"], "-150"),
+                (dining["id"], "50"),
+                (receivables["id"], "100"),
             ],
         )
-        session.commit()
 
-        assert get_balance(session, bank) == Decimal("-150")
-        assert get_balance(session, reimbursements) == Decimal("100")
-        assert get_balance(session, dining) == Decimal("50")
+        assert get_balance(client, bank["id"]) == -150
+        assert get_balance(client, receivables["id"]) == 100
+        assert get_balance(client, dining["id"]) == 50
 
-        create_transaction(
-            session,
+        post_splits(
+            client,
             "Reimbursement",
             [
-                (bank, Decimal("100")),
-                (reimbursements, -Decimal("100")),
+                (bank["id"], "100"),
+                (receivables["id"], "-100"),
             ],
         )
-        session.commit()
-    
-        assert get_balance(session, bank) == Decimal("-50")
-        assert get_balance(session, reimbursements) == Decimal("0")
-        assert get_balance(session, dining) == Decimal("50")
 
-        report = get_cleaned_expenses(session)
-        assert report[report["account_name"] == "expense:dining"]["amount"].iloc[0] == 50
-        
-        print("[OK] example_dinners: balances consistent after dinner and reimbursement")
+        assert get_balance(client, bank["id"]) == -50
+        assert get_balance(client, receivables["id"]) == 0
+        assert get_balance(client, dining["id"]) == 50
+
+        report = get_expenses_report(client)
+        dining_row = next(r for r in report if r["account_name"] == "expense:dining")
+        assert dining_row["amount"] == 50
+
+        print("[OK] test_dinners: balances consistent after dinner and reimbursement")
 
 
 if __name__ == "__main__":

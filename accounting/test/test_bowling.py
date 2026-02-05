@@ -1,88 +1,96 @@
 """
-Example: post a few transactions and assert account balances (sum of splits per account).
-Shows that double-entry keeps every account's balance consistent.
+Example: post a few transactions and assert account balances.
+Same scenario as before, now via the REST API with an ephemeral DB.
 """
 
 from decimal import Decimal
 
-from sqlalchemy import func
+from accounting.test.api_helpers import (
+    create_account,
+    get_balance,
+    temporary_api_client,
+    post_splits,
+    get_expenses_report,
+)
 
-from accounting.models import AccountType, Split, create_transaction
-from accounting.reports import get_cleaned_expenses
-from accounting.seed_accounts import create_account
-from accounting.test.helpers import get_account_id, temporary_ledger_db, test_decimal
 
-
-def get_balance(session, account_id: int) -> Decimal:
-    """Sum of all split amounts for the given account."""
-    result = session.query(func.coalesce(func.sum(Split.amount), 0)).filter(
-        Split.account_id == account_id
-    ).scalar()
-    return Decimal(str(result))
+def test_decimal_api(actual: Decimal, expected: Decimal) -> None:
+    assert abs(actual - expected) < 1e-9, f"Expected {expected} but found {actual}"
 
 
 def main() -> None:
-    with temporary_ledger_db() as session:
-
-        create_account(session, AccountType.ASSET, "bank")
-        create_account(session, AccountType.ASSET, "reimbursements")
-        create_account(session, AccountType.LIABILITY, "iou")
-        create_account(session, AccountType.EXPENSE, "dining")
-        create_account(session, AccountType.EXPENSE, "bowling")
-        create_account(session, AccountType.EXPENSE, "oil")
-        
-        bank = get_account_id(session, AccountType.ASSET, "bank")
-        reimbursements = get_account_id(session, AccountType.ASSET, "reimbursements")
-        iou = get_account_id(session, AccountType.LIABILITY, "iou")
-        dining = get_account_id(session, AccountType.EXPENSE, "dining")
-        bowling = get_account_id(session, AccountType.EXPENSE, "bowling")
-        oil = get_account_id(session, AccountType.EXPENSE, "oil")
+    with temporary_api_client() as client:
+        bank = create_account(client, "asset", "bank")
+        receivables = create_account(client, "asset", "receivables")
+        payables = create_account(client, "liability", "payables")
+        dining = create_account(client, "expense", "dining")
+        bowling = create_account(client, "expense", "bowling")
+        oil = create_account(client, "expense", "oil")
 
         # Bowling 60 total for 5 people
-        create_transaction(session, "Bowling", [
-            (iou, -Decimal("60")),
-            (bowling, Decimal("12")),
-            (reimbursements, Decimal("48")),
-        ])
+        post_splits(
+            client,
+            "Bowling",
+            [
+                (payables["id"], "-60"),
+                (bowling["id"], "12"),
+                (receivables["id"], "48"),
+            ],
+        )
 
         # Dinner for myself
-        create_transaction(session, "Bowling", [
-            (iou, -Decimal("27")),
-            (dining, Decimal("27")),
-        ])
+        post_splits(
+            client,
+            "Bowling",
+            [
+                (payables["id"], "-27"),
+                (dining["id"], "27"),
+            ],
+        )
 
-        # Parents reimbursement
-        create_transaction(session, "Parents reimbursement", [
-            (bank, -Decimal("87")),
-            (iou, Decimal("87")),
-        ])
+        # Parents payable
+        post_splits(
+            client,
+            "Parents payable",
+            [
+                (bank["id"], "-87"),
+                (payables["id"], "87"),
+            ],
+        )
 
         # Oil payment
-        create_transaction(session, "Oil payment", [
-            (bank, -Decimal("70")),
-            (reimbursements, Decimal("70")),
-            (oil, Decimal("0")),
-        ])
+        post_splits(
+            client,
+            "Oil payment",
+            [
+                (bank["id"], "-70"),
+                (receivables["id"], "70"),
+                (oil["id"], "0"),
+            ],
+        )
 
-        # Friends reimbursement
-        create_transaction(session, "Friends reimbursement", [
-            (bank, Decimal("48")),
-            (reimbursements, -Decimal("48")),
-        ])
-        
-        session.commit()
+        # Friends receivable
+        post_splits(
+            client,
+            "Friends receivable",
+            [
+                (bank["id"], "48"),
+                (receivables["id"], "-48"),
+            ],
+        )
 
-        test_decimal(get_balance(session, bank), Decimal("-109"))
-        test_decimal(get_balance(session, iou), Decimal("0"))
-        test_decimal(get_balance(session, reimbursements), Decimal("70"))
-        test_decimal(get_balance(session, dining), Decimal("27"))
-        test_decimal(get_balance(session, bowling), Decimal("12"))
-        test_decimal(get_balance(session, oil), Decimal("0"))
+        test_decimal_api(get_balance(client, bank["id"]), Decimal("-109"))
+        test_decimal_api(get_balance(client, payables["id"]), Decimal("0"))
+        test_decimal_api(get_balance(client, receivables["id"]), Decimal("70"))
+        test_decimal_api(get_balance(client, dining["id"]), Decimal("27"))
+        test_decimal_api(get_balance(client, bowling["id"]), Decimal("12"))
+        test_decimal_api(get_balance(client, oil["id"]), Decimal("0"))
 
-        report = get_cleaned_expenses(session)
-        test_decimal(report['amount'].sum(), Decimal("39"))
-        
-        print("[OK] example_night: balances consistent after dinner and reimbursement")
+        report = get_expenses_report(client)
+        total_expense = sum(r["amount"] for r in report)
+        test_decimal_api(Decimal(total_expense), Decimal("39"))
+
+        print("[OK] test_bowling: balances consistent after bowling and dinner")
 
 
 if __name__ == "__main__":
