@@ -67,28 +67,16 @@ def process_pdf(
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "path",
-        type=str,
-        help="PDF path or glob (e.g. *.pdf or statements/**/*.pdf)",
-    )
+    parser.add_argument("path", type=Path, help="PDF path or glob (e.g. *.pdf or statements/**/*.pdf)")
     parser.add_argument("--config", "-c", type=Path, required=True, help="Path to tables YAML config")
     parser.add_argument("--out-dir", "-o", type=Path, required=True, help="Output directory")
     parser.add_argument("--snap-tolerance", type=float, default=10)
     parser.add_argument("--offset", type=float, default=-10)
     args = parser.parse_args()
 
-    path_arg = Path(args.path)
-    if "*" in path_arg.name or "?" in path_arg.name or "[" in path_arg.name:
-        pdf_paths = sorted(path_arg.parent.glob(path_arg.name))
-    else:
-        pdf_paths = [path_arg] if path_arg.exists() else []
-
-    pdf_paths = [p for p in pdf_paths if p.is_file() and p.suffix.lower() == ".pdf"]
-    if not pdf_paths:
-        raise SystemExit(f"No PDFs found for: {args.path}")
-
+    pdf_paths = sorted(args.path.parent.glob(args.path.name))
     tables = load_tables_config(args.config)
+    
     for pdf_path in pdf_paths:
         print(pdf_path)
         process_pdf(
