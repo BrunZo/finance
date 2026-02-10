@@ -93,6 +93,7 @@ def list_all_transactions_with_splits(session: Session) -> list[dict]:
                 "id": tx.id,
                 "timestamp": tx.timestamp.isoformat() if tx.timestamp else None,
                 "description": tx.description,
+                "ext_ref": tx.ext_ref,
                 "splits": splits_out,
             }
         )

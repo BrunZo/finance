@@ -21,8 +21,9 @@ class SplitOut(BaseModel):
 
 class TransactionOut(BaseModel):
     id: int
-    timestamp: str 
+    timestamp: str
     description: str | None
+    ext_ref: str | None = None
     splits: list[SplitOut]
 
 

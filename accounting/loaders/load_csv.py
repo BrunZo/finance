@@ -12,7 +12,7 @@ from pathlib import Path
 
 from sqlalchemy.orm import Session
 
-from accounting.models import AccountType, create_transaction
+from accounting.models import AccountType, Transaction, create_transaction
 from accounting.rest_api.accounts import services as account_services
 
 
@@ -35,7 +35,7 @@ def load_parsed_csv(
     - session: SQLAlchemy session (caller commits).
     - bank_tag: base tag for the asset account -> asset:{bank_tag}:{currency}.
     - expense_tag: base tag for the expense account -> expense:{expense_tag}:{currency}.
-    - skip_duplicates: if True, skip rows whose (date, description, amount) already seen in this file.
+    - skip_duplicates: if True, skip rows whose ref is already stored as ext_ref on an existing transaction.
 
     Returns the number of transactions created.
     """
@@ -52,10 +52,15 @@ def load_parsed_csv(
     with open(csv_path, newline="", encoding="utf-8") as f:
         for row in csv.DictReader(f):
             ts = datetime.strptime(row.get("date"), "%Y-%m-%d")
-            description = row.get("description") 
-            ref = row.get("ref") # this could be used in the future for deduping
+            description = row.get("description")
+            ref = row.get("ref").strip()
             currency = row.get("currency")
-            amount = Decimal(row.get("amount"))            
+            amount = Decimal(row.get("amount"))
+
+            if skip_duplicates and ref is not None:
+                existing = session.query(Transaction).filter(Transaction.ext_ref == ref).first()
+                if existing is not None:
+                    continue
 
             bank = account_services.get_or_create_account(
                 session, AccountType.ASSET, f"{bank_tag}:{currency}"
@@ -65,7 +70,6 @@ def load_parsed_csv(
             )
 
             desc_display = f"{description}".strip()
-            
             if len(desc_display) > 256:
                 desc_display = desc_display[:253] + "..."
 
@@ -74,6 +78,7 @@ def load_parsed_csv(
                 desc_display,
                 [(bank.id, -amount), (expense.id, amount)],
                 timestamp=ts,
+                ext_ref=ref,
             )
             created += 1
 

@@ -1,8 +1,8 @@
 """SQLAlchemy models for double-entry bookkeeping."""
 
+from datetime import datetime, timezone
 from decimal import Decimal
 from enum import Enum as PyEnum
-from datetime import datetime
 
 from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Numeric, UniqueConstraint, Enum
 from sqlalchemy.orm import DeclarativeBase, relationship
@@ -39,10 +39,12 @@ class Account(Base):
 
 class Transaction(Base):
     __tablename__ = "transactions"
+    __table_args__ = (UniqueConstraint("ext_ref", name="uq_transaction_ext_ref"),)
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    timestamp = Column(DateTime, default=datetime.utcnow(), nullable=False)
+    timestamp = Column(DateTime, default=datetime.now(timezone.utc), nullable=False)
     description = Column(String(256))
+    ext_ref = Column(String(256), nullable=True, unique=True)
 
     splits = relationship("Split", back_populates="transaction", cascade="all, delete-orphan")
 
@@ -88,18 +90,20 @@ def create_transaction(
     splits: list[tuple[int, Decimal]],
     *,
     timestamp: datetime | None = None,
+    ext_ref: str | None = None,
 ) -> Transaction:
     """
     Create a transaction with the given splits. Raises ValueError if splits do not sum to zero.
     splits: list of (account_id, amount) with amount positive for Debit, negative for Credit.
+    ext_ref: optional external reference (e.g. statement ref) for deduplication; must be unique if set.
     """
     _check_splits_balance(splits)
     _check_splits_account_ids(splits, session)
 
     if not timestamp:
-        timestamp = datetime.now(datetime.timezone.utc)
+        timestamp = datetime.now(timezone.utc)
 
-    tx = Transaction(description=description, timestamp=timestamp)
+    tx = Transaction(description=description, timestamp=timestamp, ext_ref=ext_ref or None)
     session.add(tx)
     session.flush()
     for account_id, amount in splits:
