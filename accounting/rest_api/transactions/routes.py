@@ -28,6 +28,12 @@ def _run(fn: Callable[..., None], *args, **kwargs) -> dict:
         raise HTTPException(400, detail=str(e))
 
 
+@router.get("", response_model=list[schemas.TransactionOut])
+def list_transactions(session: SessionDep) -> list[schemas.TransactionOut]:
+    """List all transactions with their splits and account names (for debugging import)."""
+    rows = services.list_all_transactions_with_splits(session)
+    return [schemas.TransactionOut(**r) for r in rows]
+
 
 @router.post("/splits")
 def create_splits(req: schemas.SplitsRequest, session: SessionDep) -> dict:

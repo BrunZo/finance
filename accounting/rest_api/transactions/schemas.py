@@ -13,15 +13,28 @@ class SplitsRequest(BaseModel):
     splits: list[SplitItem] = Field(..., min_length=2)
 
 
-class FriendAmount(BaseModel):
-    friend_name: str = ""
+class SplitOut(BaseModel):
+    account_id: int
+    account_name: str
     amount: str
+
+
+class TransactionOut(BaseModel):
+    id: int
+    timestamp: str 
+    description: str | None
+    splits: list[SplitOut]
 
 
 class Expense(BaseModel):
     description: str = Field(..., min_length=1)
     source_account_id: int
     expense_account_id: int
+    amount: str
+
+
+class FriendAmount(BaseModel):
+    friend_name: str = ""
     amount: str
 
 
@@ -55,4 +68,3 @@ class PayPayableRequest(BaseModel):
     amount: str
     payable_account_id: int
     from_bank_account_id: int
-

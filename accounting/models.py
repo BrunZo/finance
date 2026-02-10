@@ -86,6 +86,8 @@ def create_transaction(
     session,
     description: str,
     splits: list[tuple[int, Decimal]],
+    *,
+    timestamp: datetime | None = None,
 ) -> Transaction:
     """
     Create a transaction with the given splits. Raises ValueError if splits do not sum to zero.
@@ -94,7 +96,10 @@ def create_transaction(
     _check_splits_balance(splits)
     _check_splits_account_ids(splits, session)
 
-    tx = Transaction(description=description)
+    if not timestamp:
+        timestamp = datetime.now(datetime.timezone.utc)
+
+    tx = Transaction(description=description, timestamp=timestamp)
     session.add(tx)
     session.flush()
     for account_id, amount in splits:
