@@ -45,6 +45,24 @@ def create_splits(req: schemas.SplitsRequest, session: SessionDep) -> dict:
     return _run(services.create_from_splits, session, req.description, splits)
 
 
+@router.patch("/splits/{split_id}", response_model=schemas.SplitOut)
+def update_split(
+    split_id: int,
+    req: schemas.SplitUpdate,
+    session: SessionDep,
+) -> schemas.SplitOut:
+    try:
+        split = services.update_split_account(session, split_id, req.account_id)
+    except ValueError as e:
+        raise HTTPException(400, detail=str(e))
+    return schemas.SplitOut(
+        id=split.id,
+        account_id=split.account_id,
+        account_name=split.account.name if split.account else f"account:{split.account_id}",
+        amount=str(split.amount),
+    )
+
+
 @router.post("/expense")
 def create_expense(
     req: schemas.Expense,

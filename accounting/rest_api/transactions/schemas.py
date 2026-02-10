@@ -14,9 +14,14 @@ class SplitsRequest(BaseModel):
 
 
 class SplitOut(BaseModel):
+    id: int
     account_id: int
     account_name: str
     amount: str
+
+
+class SplitUpdate(BaseModel):
+    account_id: int = Field(..., gt=0)
 
 
 class TransactionOut(BaseModel):
