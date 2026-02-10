@@ -1,4 +1,4 @@
-"""Transactions API: expense, pay-for-many, being-paid-for, receive-receivable, pay-payable, splits."""
+"""Transactions API: list transactions, create from splits."""
 
 from decimal import Decimal
 from typing import Annotated, Callable
@@ -60,83 +60,4 @@ def update_split(
         account_id=split.account_id,
         account_name=split.account.name if split.account else f"account:{split.account_id}",
         amount=str(split.amount),
-    )
-
-
-@router.post("/expense")
-def create_expense(
-    req: schemas.Expense,
-    session: SessionDep,
-) -> dict:
-    """Record an expense you paid yourself (e.g. from bank to dining)."""
-    amount = _parse_decimal(req.amount)
-    return _run(
-        services.create_expense,
-        session,
-        req.description,
-        req.source_account_id,
-        req.expense_account_id,
-        amount,
-    )
-
-
-@router.post("/pay-for-many")
-def pay_for_many(req: schemas.PayForManyRequest, session: SessionDep) -> dict:
-    total = _parse_decimal(req.total_amount, "total_amount")
-    my_share = _parse_decimal(req.my_share, "my_share")
-    friend_amounts = [
-        (f.friend_name, _parse_decimal(f.amount, "friend amount"))
-        for f in req.friend_amounts
-    ]
-    return _run(
-        services.pay_for_many,
-        session,
-        req.description,
-        req.source_account_id,
-        req.expense_account_id,
-        total,
-        my_share,
-        friend_amounts,
-    )
-
-
-@router.post("/being-paid-for")
-def being_paid_for(req: schemas.BeingPaidForRequest, session: SessionDep) -> dict:
-    my_share = _parse_decimal(req.my_expense_share, "my_expense_share")
-    return _run(
-        services.being_paid_for,
-        session,
-        req.description,
-        req.liability_account_id,
-        req.expense_account_id,
-        my_share,
-    )
-
-
-@router.post("/receive-receivable")
-def receive_receivable(
-    req: schemas.ReceiveReceivableRequest,
-    session: SessionDep,
-) -> dict:
-    amount = _parse_decimal(req.amount)
-    return _run(
-        services.receive_receivable,
-        session,
-        req.description,
-        amount,
-        req.from_receivable_account_id,
-        req.to_bank_account_id,
-    )
-
-
-@router.post("/pay-payable")
-def pay_payable(req: schemas.PayPayableRequest, session: SessionDep) -> dict:
-    amount = _parse_decimal(req.amount)
-    return _run(
-        services.pay_payable,
-        session,
-        req.description,
-        amount,
-        req.payable_account_id,
-        req.from_bank_account_id,
     )
