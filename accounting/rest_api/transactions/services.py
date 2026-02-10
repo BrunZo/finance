@@ -8,7 +8,7 @@ from typing import Sequence
 
 from sqlalchemy.orm import Session
 
-from accounting.models import AccountType, create_transaction
+from accounting.models import AccountType, create_transaction, Split, Transaction
 from accounting.rest_api.accounts import services as account_services
 
 
@@ -67,6 +67,36 @@ def create_expense(
             (expense_account_id, amount),
         ],
     )
+
+
+def list_all_transactions_with_splits(session: Session) -> list[dict]:
+    """Return all transactions with splits and account names."""
+    tx_list = (
+        session.query(Transaction)
+        .order_by(Transaction.timestamp.desc(), Transaction.id.desc())
+        .all()
+    )
+    out = []
+    for tx in tx_list:
+        splits_out = []
+        for sp in tx.splits:
+            name = sp.account.name if sp.account else f"account:{sp.account_id}"
+            splits_out.append(
+                {
+                    "account_id": sp.account_id,
+                    "account_name": name,
+                    "amount": str(sp.amount),
+                }
+            )
+        out.append(
+            {
+                "id": tx.id,
+                "timestamp": tx.timestamp.isoformat() if tx.timestamp else None,
+                "description": tx.description,
+                "splits": splits_out,
+            }
+        )
+    return out
 
 
 def pay_for_many(
