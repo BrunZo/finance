@@ -30,3 +30,12 @@ class TransactionOut(BaseModel):
     description: str | None
     ext_ref: str | None = None
     splits: list[SplitOut]
+
+
+class UncategorizedSplitOut(BaseModel):
+    split_id: int
+    transaction_id: int
+    description: str
+    amount: str
+    account_id: int
+    account_name: str

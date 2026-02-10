@@ -130,6 +130,41 @@ def list_all_transactions_with_splits(session: Session) -> list[dict]:
     return out
 
 
+def _is_uncategorized_expense_tag(tag: str) -> bool:
+    """True if this expense tag is the default uncategorized one (from CSV import)."""
+    if not tag:
+        return False
+    return tag == "uncategorized" or tag.startswith("uncategorized:")
+
+
+def list_uncategorized_expense_splits(session: Session) -> list[dict]:
+    """Return splits that are expense and uncategorized (tag uncategorized or uncategorized:*)."""
+    rows = (
+        session.query(Split, Transaction, Account)
+        .join(Transaction, Split.transaction_id == Transaction.id)
+        .join(Account, Split.account_id == Account.id)
+        .filter(
+            Account.account_type == AccountType.EXPENSE,
+            (Account.tag == "uncategorized") | (Account.tag.like("uncategorized:%")),
+        )
+        .order_by(Transaction.description, Split.id)
+        .all()
+    )
+    out = []
+    for split, tx, account in rows:
+        out.append(
+            {
+                "split_id": split.id,
+                "transaction_id": tx.id,
+                "description": tx.description or "",
+                "amount": str(split.amount),
+                "account_id": split.account_id,
+                "account_name": account.name,
+            }
+        )
+    return out
+
+
 def update_split_account(session: Session, split_id: int, account_id: int) -> Split:
     """Update a split's account. The new account must exist. Amount is unchanged (keeps transaction balanced).
     If the new account is an expense account and the transaction has a description, the description->account
