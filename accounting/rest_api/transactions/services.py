@@ -3,13 +3,59 @@ Transaction services: high-level operations for transfer/split patterns.
 Amounts are positive; signs applied internally (debit +, credit -).
 """
 
+from datetime import datetime, timezone
 from decimal import Decimal
-from typing import Sequence
 
 from sqlalchemy.orm import Session
 
-from accounting.models import AccountType, create_transaction, Split, Transaction
+from accounting.models import Account, AccountType, Split, Transaction
 from accounting.rest_api.accounts import services as account_services
+
+
+def _check_splits_balance(splits: list[tuple[int, Decimal]]) -> None:
+    """Raise ValueError if sum of amounts is not zero (invalid double-entry transaction)."""
+    total = sum([amt for _, amt in splits])
+    if total != 0:
+        raise ValueError(f"Splits must sum to zero, got {total}")
+
+
+def _check_splits_account_ids(splits: list[tuple[int, Decimal]], session: Session) -> None:
+    """Raise ValueError if any account id does not exist."""
+    missing_account_ids = []
+    for account_id, _ in splits:
+        if session.query(Account).filter(Account.id == account_id).first() is None:
+            missing_account_ids.append(account_id)
+    if missing_account_ids:
+        raise ValueError(f"Account(s) {', '.join(str(x) for x in missing_account_ids)} do not exist")
+
+
+def create_transaction(
+    session: Session,
+    description: str,
+    splits: list[tuple[int, Decimal]],
+    *,
+    timestamp: datetime | None = None,
+    ext_ref: str | None = None,
+) -> Transaction:
+    """
+    Create a transaction with the given splits. Raises ValueError if splits do not sum to zero.
+    splits: list of (account_id, amount) with amount positive for Debit, negative for Credit.
+    ext_ref: optional external reference (e.g. statement ref) for deduplication; must be unique if set.
+    """
+    _check_splits_balance(splits)
+    _check_splits_account_ids(splits, session)
+
+    if not timestamp:
+        timestamp = datetime.now(timezone.utc)
+
+    tx = Transaction(description=description, timestamp=timestamp, ext_ref=ext_ref or None)
+    session.add(tx)
+    session.flush()
+    for account_id, amount in splits:
+        session.add(
+            Split(transaction_id=tx.id, account_id=account_id, amount=amount)
+        )
+    return tx
 
 
 def _receivable_tag(friend_name: str | None) -> str:
@@ -51,24 +97,6 @@ def create_from_splits(
     create_transaction(session, description, splits)
 
 
-def create_expense(
-    session: Session,
-    description: str,
-    source_account_id: int,
-    expense_account_id: int,
-    amount: Decimal,
-) -> None:
-    """Record an expense you paid yourself: money leaves source, goes to expense."""
-    create_transaction(
-        session,
-        description,
-        [
-            (source_account_id, -amount),
-            (expense_account_id, amount),
-        ],
-    )
-
-
 def list_all_transactions_with_splits(session: Session) -> list[dict]:
     """Return all transactions with splits and account names."""
     tx_list = (
@@ -98,75 +126,3 @@ def list_all_transactions_with_splits(session: Session) -> list[dict]:
             }
         )
     return out
-
-
-def pay_for_many(
-    session: Session,
-    description: str,
-    source_account_id: int,
-    expense_account_id: int,
-    total_amount: Decimal,
-    my_share: Decimal,
-    friend_amounts: Sequence[tuple[str | None, Decimal]],
-) -> None:
-    splits: list[tuple[int, Decimal]] = [
-        (source_account_id, -total_amount),
-        (expense_account_id, my_share),
-    ]
-    for friend_name, amount in friend_amounts:
-        if amount <= 0:
-            continue
-        recv_id = get_or_create_receivable_account(session, friend_name or None)
-        splits.append((recv_id, amount))
-    create_transaction(session, description, splits)
-
-
-def being_paid_for(
-    session: Session,
-    description: str,
-    liability_account_id: int,
-    expense_account_id: int,
-    my_share: Decimal,
-) -> None:
-    create_transaction(
-        session,
-        description,
-        [
-            (liability_account_id, -my_share),
-            (expense_account_id, my_share),
-        ],
-    )
-
-
-def receive_receivable(
-    session: Session,
-    description: str,
-    amount: Decimal,
-    from_receivable_account_id: int,
-    to_bank_account_id: int,
-) -> None:
-    create_transaction(
-        session,
-        description,
-        [
-            (to_bank_account_id, amount),
-            (from_receivable_account_id, -amount),
-        ],
-    )
-
-
-def pay_payable(
-    session: Session,
-    description: str,
-    amount: Decimal,
-    payable_account_id: int,
-    from_bank_account_id: int,
-) -> None:
-    create_transaction(
-        session,
-        description,
-        [
-            (from_bank_account_id, -amount),
-            (payable_account_id, amount),
-        ],
-    )

@@ -12,8 +12,9 @@ from pathlib import Path
 
 from sqlalchemy.orm import Session
 
-from accounting.models import AccountType, Transaction, create_transaction
+from accounting.models import AccountType, Transaction
 from accounting.rest_api.accounts import services as account_services
+from accounting.rest_api.transactions import services as transaction_services
 
 
 # Parsed CSV columns (must match parsers.parse.PARSED_HEADER)
@@ -73,7 +74,7 @@ def load_parsed_csv(
             if len(desc_display) > 256:
                 desc_display = desc_display[:253] + "..."
 
-            create_transaction(
+            transaction_services.create_transaction(
                 session,
                 desc_display,
                 [(bank.id, -amount), (expense.id, amount)],
