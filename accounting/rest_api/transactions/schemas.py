@@ -14,9 +14,14 @@ class SplitsRequest(BaseModel):
 
 
 class SplitOut(BaseModel):
+    id: int
     account_id: int
     account_name: str
     amount: str
+
+
+class SplitUpdate(BaseModel):
+    account_id: int = Field(..., gt=0)
 
 
 class TransactionOut(BaseModel):
@@ -25,3 +30,12 @@ class TransactionOut(BaseModel):
     description: str | None
     ext_ref: str | None = None
     splits: list[SplitOut]
+
+
+class UncategorizedSplitOut(BaseModel):
+    split_id: int
+    transaction_id: int
+    description: str
+    amount: str
+    account_id: int
+    account_name: str

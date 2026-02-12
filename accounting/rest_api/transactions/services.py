@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from accounting.models import Account, AccountType, Split, Transaction
 from accounting.rest_api.accounts import services as account_services
+from accounting.rest_api.description_tags import services as mapping_services
 
 
 def _check_splits_balance(splits: list[tuple[int, Decimal]]) -> None:
@@ -98,7 +99,7 @@ def create_from_splits(
 
 
 def list_all_transactions_with_splits(session: Session) -> list[dict]:
-    """Return all transactions with splits and account names."""
+    """Return all transactions with splits (id, account, amount)."""
     tx_list = (
         session.query(Transaction)
         .order_by(Transaction.timestamp.desc(), Transaction.id.desc())
@@ -111,6 +112,7 @@ def list_all_transactions_with_splits(session: Session) -> list[dict]:
             name = sp.account.name if sp.account else f"account:{sp.account_id}"
             splits_out.append(
                 {
+                    "id": sp.id,
                     "account_id": sp.account_id,
                     "account_name": name,
                     "amount": str(sp.amount),
@@ -126,3 +128,59 @@ def list_all_transactions_with_splits(session: Session) -> list[dict]:
             }
         )
     return out
+
+
+def _is_uncategorized_expense_tag(tag: str) -> bool:
+    """True if this expense tag is the default uncategorized one (from CSV import)."""
+    if not tag:
+        return False
+    return tag == "uncategorized" or tag.startswith("uncategorized:")
+
+
+def list_uncategorized_expense_splits(session: Session) -> list[dict]:
+    """Return splits that are expense and uncategorized (tag uncategorized or uncategorized:*)."""
+    rows = (
+        session.query(Split, Transaction, Account)
+        .join(Transaction, Split.transaction_id == Transaction.id)
+        .join(Account, Split.account_id == Account.id)
+        .filter(
+            Account.account_type == AccountType.EXPENSE,
+            (Account.tag == "uncategorized") | (Account.tag.like("uncategorized:%")),
+        )
+        .order_by(Transaction.description, Split.id)
+        .all()
+    )
+    out = []
+    for split, tx, account in rows:
+        out.append(
+            {
+                "split_id": split.id,
+                "transaction_id": tx.id,
+                "description": tx.description or "",
+                "amount": str(split.amount),
+                "account_id": split.account_id,
+                "account_name": account.name,
+            }
+        )
+    return out
+
+
+def update_split_account(session: Session, split_id: int, account_id: int) -> Split:
+    """Update a split's account. The new account must exist. Amount is unchanged (keeps transaction balanced).
+    If the new account is an expense account and the transaction has a description, the description->account
+    mapping is updated so it stays in sync. Returns the split."""
+    split = session.query(Split).filter(Split.id == split_id).first()
+    if split is None:
+        raise ValueError("Split not found")
+    new_account = session.query(Account).filter(Account.id == account_id).first()
+    if new_account is None:
+        raise ValueError(f"Account {account_id} not found")
+    split.account_id = account_id
+    session.flush()
+    # Keep description->account mapping in sync when user manually changes an expense split
+    if (
+        new_account.account_type == AccountType.EXPENSE 
+        and split.transaction.description
+    ):
+        mapping_services.upsert_mapping(session, split.transaction.description.strip(), account_id)
+    return split

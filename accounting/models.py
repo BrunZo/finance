@@ -28,6 +28,7 @@ class Account(Base):
     tag = Column(String(64), nullable=False)
 
     splits = relationship("Split", back_populates="account")
+    description_tag_mappings = relationship("DescriptionTagMapping", back_populates="account")
 
     @property
     def name(self) -> str:
@@ -65,3 +66,17 @@ class Split(Base):
 
     def __repr__(self) -> str:
         return f"<Split account_id={self.account_id} amount={self.amount}>"
+
+
+class DescriptionTagMapping(Base):
+    __tablename__ = "description_tag_mappings"
+    __table_args__ = (UniqueConstraint("description", name="uq_description_tag_description"),)
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    description = Column(String(256), nullable=False, unique=True)
+    account_id = Column(Integer, ForeignKey("accounts.id"), nullable=False)
+
+    account = relationship("Account", back_populates="description_tag_mappings")
+
+    def __repr__(self) -> str:
+        return f"<DescriptionTagMapping {self.description!r} -> account_id={self.account_id}>"
