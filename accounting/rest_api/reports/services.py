@@ -4,7 +4,6 @@ import pandas as pd
 from sqlalchemy.orm import Session
 
 from accounting.models import Account, AccountType, Split, Transaction
-from accounting.rest_api.reports.schemas import ExpenseRow
 
 
 def _enum_value(x) -> str:
@@ -32,12 +31,11 @@ def get_expenses_df(session: Session) -> pd.DataFrame:
     return df.groupby("account_name", as_index=False)["amount"].sum()
 
 
-def get_expenses_rows(session: Session) -> list[ExpenseRow]:
-    """Expense totals by account for the API."""
+def get_expenses_rows(session: Session) -> list[dict]:
     df = get_expenses_df(session)
     if df.empty:
         return []
     return [
-        ExpenseRow(account_name=row["account_name"], amount=float(row["amount"]))
+        {"account_name": row["account_name"], "amount": float(row["amount"])}
         for _, row in df.iterrows()
     ]

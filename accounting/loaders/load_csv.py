@@ -36,7 +36,7 @@ def load_parsed_csv(
     - session: SQLAlchemy session (caller commits).
     - bank_tag: base tag for the asset account -> asset:{bank_tag}:{currency}.
     - expense_tag: base tag for the expense account -> expense:{expense_tag}:{currency}.
-    - skip_duplicates: if True, skip rows whose ref is already stored as ext_ref on an existing transaction.
+    - skip_duplicates: if True, skip rows whose ref is already stored as external_reference on an existing transaction.
 
     Returns the number of transactions created.
     """
@@ -59,14 +59,14 @@ def load_parsed_csv(
             amount = Decimal(row.get("amount"))
 
             if skip_duplicates and ref is not None:
-                existing = session.query(Transaction).filter(Transaction.ext_ref == ref).first()
+                existing = session.query(Transaction).filter(Transaction.external_reference == ref).first()
                 if existing is not None:
                     continue
 
-            bank = account_services.get_or_create_account(
+            bank = account_services.upsert_account(
                 session, AccountType.ASSET, f"{bank_tag}:{currency}"
             )
-            expense = account_services.get_or_create_account(
+            expense = account_services.upsert_account(
                 session, AccountType.EXPENSE, f"{expense_tag}:{currency}"
             )
 
@@ -79,7 +79,7 @@ def load_parsed_csv(
                 desc_display,
                 [(bank.id, -amount), (expense.id, amount)],
                 timestamp=ts,
-                ext_ref=ref,
+                external_reference=ref,
             )
             created += 1
 

@@ -1,11 +1,14 @@
 """SQLAlchemy models for double-entry bookkeeping."""
 
 from datetime import datetime, timezone
-from decimal import Decimal
 from enum import Enum as PyEnum
 
 from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Numeric, UniqueConstraint, Enum
 from sqlalchemy.orm import DeclarativeBase, relationship
+
+
+class Base(DeclarativeBase):
+    pass
 
 
 class AccountType(PyEnum):
@@ -13,10 +16,6 @@ class AccountType(PyEnum):
     LIABILITY = "liability"
     INCOME = "income"
     EXPENSE = "expense"
-
-
-class Base(DeclarativeBase):
-    pass
 
 
 class Account(Base):
@@ -28,7 +27,7 @@ class Account(Base):
     tag = Column(String(64), nullable=False)
 
     splits = relationship("Split", back_populates="account")
-    description_tag_mappings = relationship("DescriptionTagMapping", back_populates="account")
+    description_expense_mappings = relationship("DescriptionExpenseMapping", back_populates="expense_account")
 
     @property
     def name(self) -> str:
@@ -40,12 +39,12 @@ class Account(Base):
 
 class Transaction(Base):
     __tablename__ = "transactions"
-    __table_args__ = (UniqueConstraint("ext_ref", name="uq_transaction_ext_ref"),)
+    __table_args__ = (UniqueConstraint("external_reference", name="uq_transaction_external_reference"),)
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     timestamp = Column(DateTime, default=datetime.now(timezone.utc), nullable=False)
+    external_reference = Column(String(256), nullable=False, unique=True)
     description = Column(String(256))
-    ext_ref = Column(String(256), nullable=True, unique=True)
 
     splits = relationship("Split", back_populates="transaction", cascade="all, delete-orphan")
 
@@ -68,15 +67,15 @@ class Split(Base):
         return f"<Split account_id={self.account_id} amount={self.amount}>"
 
 
-class DescriptionTagMapping(Base):
-    __tablename__ = "description_tag_mappings"
-    __table_args__ = (UniqueConstraint("description", name="uq_description_tag_description"),)
+class DescriptionExpenseMapping(Base):
+    __tablename__ = "description_expense_mappings"
+    __table_args__ = (UniqueConstraint("description", name="uq_description_expense_description"),)
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     description = Column(String(256), nullable=False, unique=True)
-    account_id = Column(Integer, ForeignKey("accounts.id"), nullable=False)
+    expense_account_id = Column(Integer, ForeignKey("accounts.id"), nullable=False)
 
-    account = relationship("Account", back_populates="description_tag_mappings")
+    expense_account = relationship("Account", back_populates="description_expense_mappings")
 
     def __repr__(self) -> str:
-        return f"<DescriptionTagMapping {self.description!r} -> account_id={self.account_id}>"
+        return f"<DescriptionExpenseMapping {self.description!r} -> expense_account_id={self.expense_account_id}>"
