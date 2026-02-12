@@ -1,5 +1,7 @@
 """Pydantic schemas for accounts API."""
 
+from decimal import Decimal
+
 from pydantic import BaseModel, ConfigDict, Field
 
 from accounting.models import AccountType
@@ -17,9 +19,13 @@ class AccountUpsert(BaseModel):
 
 class AccountOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
-    
+
     id: int
     name: str
     account_type: AccountType
     tag: str
+
+
+class AccountWithBalance(AccountOut):
+    balance_by_currency: dict[str, Decimal]
 

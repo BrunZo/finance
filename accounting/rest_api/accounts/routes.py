@@ -23,12 +23,18 @@ def insert_account(
     return schemas.AccountOut.model_validate(account)
 
 
-@router.get("", response_model=list[schemas.AccountOut])
+@router.get("", response_model=list[schemas.AccountWithBalance])
 def list_accounts(
     session: SessionDep,
-) -> list[schemas.AccountOut]:
+) -> list[schemas.AccountWithBalance]:
     accounts = services.list_accounts(session)
-    return [schemas.AccountOut.model_validate(acc) for acc in accounts]
+    return [
+        schemas.AccountWithBalance(
+            **schemas.AccountOut.model_validate(acc).model_dump(),
+            balance_by_currency=services.balance_by_currency(session, acc.id),
+        )
+        for acc in accounts
+    ]
 
 
 @router.get("/{account_id}")
