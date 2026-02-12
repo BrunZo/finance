@@ -1,11 +1,13 @@
 """Pydantic schemas for transactions API."""
 
-from pydantic import BaseModel, Field
+from datetime import datetime
+from decimal import Decimal
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class SplitItem(BaseModel):
     account_id: int
-    amount: str  # decimal string: positive=debit, negative=credit
+    amount: Decimal
 
 
 class SplitsRequest(BaseModel):
@@ -14,10 +16,11 @@ class SplitsRequest(BaseModel):
 
 
 class SplitOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     account_id: int
-    account_name: str
-    amount: str
+    amount: Decimal
 
 
 class SplitUpdate(BaseModel):
@@ -25,17 +28,11 @@ class SplitUpdate(BaseModel):
 
 
 class TransactionOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
-    timestamp: str
+    timestamp: datetime
     description: str | None
-    ext_ref: str | None = None
+    external_reference: str | None = None
     splits: list[SplitOut]
 
-
-class UncategorizedSplitOut(BaseModel):
-    split_id: int
-    transaction_id: int
-    description: str
-    amount: str
-    account_id: int
-    account_name: str

@@ -14,4 +14,5 @@ SessionDep = Annotated[Session, Depends(get_db)]
 
 @router.get("/expenses", response_model=list[schemas.ExpenseRow])
 def report_expenses(session: SessionDep) -> list[schemas.ExpenseRow]:
-    return services.get_expenses_rows(session)
+    rows = services.get_expenses_rows(session)
+    return [schemas.ExpenseRow.model_validate(row) for row in rows]

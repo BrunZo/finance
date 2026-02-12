@@ -1,15 +1,28 @@
 """Pydantic schemas for description -> expense account mapping API."""
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict
+
+from accounting.models import DescriptionExpenseMapping
 
 
-class DescriptionTagMappingOut(BaseModel):
+class DescriptionExpenseMappingOut(BaseModel):
     id: int
     description: str
-    account_id: int
-    account_name: str
+    expense_account_id: int
+    expense_account_name: str
+
+    @classmethod
+    def from_model(cls, model: DescriptionExpenseMapping):
+        return cls(
+            id=model.id,
+            description=model.description,
+            expense_account_id=model.expense_account_id,            
+            expense_account_name=model.expense_account.name,
+        )
 
 
-class DescriptionTagMappingUpsert(BaseModel):
-    description: str = Field(..., min_length=1)
-    account_id: int = Field(..., gt=0)
+class DescriptionExpenseMappingUpsert(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    description: str
+    expense_account_id: int
