@@ -79,30 +79,12 @@ def list_uncategorized_transactions(session: Session) -> list[Transaction]:
 
 
 def update_split_account(session: Session, split_id: int, account_id: int) -> Split:
+    _check_account_id(account_id, session)
+    
     split = session.query(Split).filter(Split.id == split_id).first()
     if split is None:
         raise ValueError("Split not found")
-
-    _check_account_id(account_id, session)
+    
     split.account_id = account_id
     session.flush()
-
-    # Keep description->account mapping in sync when user manually changes an expense split
-    if (
-        split.account.account_type == AccountType.EXPENSE 
-        and split.transaction.description
-    ):
-        mapping_services.upsert_mapping(session, split.transaction.description, account_id)
-
-    auto_categorize(session)    
     return split
-
-
-def auto_categorize(session: Session) -> None:
-    for tx in list_uncategorized_transactions(session):
-        mapping = mapping_services.mapping_by_description(session, tx.description)
-        if not mapping:
-            continue
-        for split in tx.splits:
-            if split.account.account_type == AccountType.EXPENSE and split.account.id != mapping.expense_account_id:
-                update_split_account(session, split.id, mapping.expense_account_id)

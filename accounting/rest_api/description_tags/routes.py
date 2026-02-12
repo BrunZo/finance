@@ -37,7 +37,7 @@ def update_mapping(
     req: schemas.DescriptionExpenseMappingUpsert,
     session: SessionDep,
 ) -> schemas.DescriptionExpenseMappingOut:
-    m = try_run(services.update_mapping, session, mapping_id, req.description, req.expense_account_id)
+    m = try_run(services.update_mapping_by_id, session, mapping_id, req.expense_account_id)
     return schemas.DescriptionExpenseMappingOut.from_model(m)
 
 
