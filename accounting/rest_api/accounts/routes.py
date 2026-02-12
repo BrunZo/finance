@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from accounting.rest_api.accounts import schemas, services
 from accounting.rest_api.deps import get_db
+from accounting.rest_api.helpers import try_run
 
 router = APIRouter(prefix="/accounts", tags=["accounts"])
 SessionDep = Annotated[Session, Depends(get_db)]
@@ -37,6 +38,16 @@ def balance(
 ) -> Decimal:
     balance = services.balance(session, account_id)
     return balance
+
+
+@router.patch("/{account_id}", response_model=schemas.AccountOut)
+def update_account(
+    session: SessionDep,
+    account_id: int,
+    req: schemas.AccountUpsert,
+) -> schemas.AccountOut:
+    account = try_run(services.update_account, session, account_id, req.to_account_type(), req.tag)
+    return schemas.AccountOut.model_validate(account)
 
 
 @router.delete("/{account_id}")
