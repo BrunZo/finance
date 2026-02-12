@@ -15,7 +15,14 @@ SessionDep = Annotated[Session, Depends(get_db)]
 
 @router.post("/splits", response_model=schemas.TransactionOut)
 def create_splits(req: schemas.SplitsRequest, session: SessionDep) -> schemas.TransactionOut:
-    tx = try_run(services.create_transaction, session, req.description, req.splits)
+    splits_tuples = [(s.account_id, s.amount) for s in req.splits]
+    tx = try_run(
+        services.create_transaction,
+        session,
+        req.description,
+        splits_tuples,
+        currency=req.currency,
+    )
     return schemas.TransactionOut.model_validate(tx)
 
 

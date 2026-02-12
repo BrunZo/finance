@@ -13,6 +13,7 @@ class SplitItem(BaseModel):
 class SplitsRequest(BaseModel):
     description: str = Field(..., min_length=1)
     splits: list[SplitItem] = Field(..., min_length=2)
+    currency: str = Field(default="USD", min_length=3, max_length=3)
 
 
 class SplitOut(BaseModel):
@@ -34,5 +35,6 @@ class TransactionOut(BaseModel):
     timestamp: datetime
     description: str | None
     external_reference: str | None = None
+    currency: str | None = None
     splits: list[SplitOut]
 

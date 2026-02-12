@@ -34,8 +34,8 @@ def load_parsed_csv(
 
     - csv_path: path to a parsed CSV (columns: date, description, ref, currency, amount).
     - session: SQLAlchemy session (caller commits).
-    - bank_tag: base tag for the asset account -> asset:{bank_tag}:{currency}.
-    - expense_tag: base tag for the expense account -> expense:{expense_tag}:{currency}.
+    - bank_tag: base tag for the asset account -> asset:{bank_tag}.
+    - expense_tag: base tag for the expense account -> expense:{expense_tag}.
     - skip_duplicates: if True, skip rows whose ref is already stored as external_reference on an existing transaction.
 
     Returns the number of transactions created.
@@ -54,7 +54,7 @@ def load_parsed_csv(
         for row in csv.DictReader(f):
             ts = datetime.strptime(row.get("date"), "%Y-%m-%d")
             description = row.get("description")
-            ref = row.get("ref").strip()
+            ref = f"{bank_tag}-{row.get('ref')}"
             currency = row.get("currency")
             amount = Decimal(row.get("amount"))
 
@@ -64,10 +64,10 @@ def load_parsed_csv(
                     continue
 
             bank = account_services.upsert_account(
-                session, AccountType.ASSET, f"{bank_tag}:{currency}"
+                session, AccountType.ASSET, bank_tag
             )
             expense = account_services.upsert_account(
-                session, AccountType.EXPENSE, f"{expense_tag}:{currency}"
+                session, AccountType.EXPENSE, expense_tag
             )
 
             desc_display = f"{description}".strip()
@@ -80,6 +80,7 @@ def load_parsed_csv(
                 [(bank.id, -amount), (expense.id, amount)],
                 timestamp=ts,
                 external_reference=ref,
+                currency=currency,
             )
             created += 1
 

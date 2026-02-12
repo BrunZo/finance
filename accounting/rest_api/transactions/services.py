@@ -5,6 +5,7 @@ Amounts are positive; signs applied internally (debit +, credit -).
 
 from datetime import datetime, timezone
 from decimal import Decimal
+import uuid
 
 from sqlalchemy.orm import Session
 
@@ -39,16 +40,18 @@ def create_transaction(
     description: str,
     splits: list[tuple[int, Decimal]],
     *,
-    timestamp: datetime | None = None,
-    external_reference: str | None = None,
+    timestamp: datetime = datetime.now(timezone.utc),
+    external_reference: str = f"api-{uuid.uuid4().hex}",
+    currency: str = "USD",
 ) -> Transaction:
     _check_splits_balance(splits)
     _check_splits_account_ids(splits, session)
-
-    if not timestamp:
-        timestamp = datetime.now(timezone.utc)
-
-    tx = Transaction(description=description, timestamp=timestamp, external_reference=external_reference)
+    tx = Transaction(
+        description=description,
+        timestamp=timestamp,
+        external_reference=external_reference,
+        currency=currency,
+    )
     session.add(tx)
     session.flush()
     for account_id, amount in splits:
@@ -70,7 +73,7 @@ def list_uncategorized_transactions(session: Session) -> list[Transaction]:
         session.query(Transaction)
         .join(Split, Transaction.id == Split.transaction_id)
         .join(Account, Split.account_id == Account.id)
-        .filter(Account.account_type == AccountType.EXPENSE, Account.tag.like("uncategorized:%"))
+        .filter(Account.account_type == AccountType.EXPENSE, Account.tag == "uncategorized")
         .distinct()
         .order_by(Transaction.timestamp.desc(), Transaction.id.desc())
         .all()

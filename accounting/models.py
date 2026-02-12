@@ -44,7 +44,8 @@ class Transaction(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     timestamp = Column(DateTime, default=datetime.now(timezone.utc), nullable=False)
     external_reference = Column(String(256), nullable=False, unique=True)
-    description = Column(String(256))
+    description = Column(String(256), nullable=True)
+    currency = Column(String(3), nullable=True, default="USD")
 
     splits = relationship("Split", back_populates="transaction", cascade="all, delete-orphan")
 
