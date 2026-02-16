@@ -1,11 +1,14 @@
 """SQLAlchemy models for double-entry bookkeeping."""
 
-from decimal import Decimal
+from datetime import datetime, timezone
 from enum import Enum as PyEnum
-from datetime import datetime
 
 from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Numeric, UniqueConstraint, Enum
 from sqlalchemy.orm import DeclarativeBase, relationship
+
+
+class Base(DeclarativeBase):
+    pass
 
 
 class AccountType(PyEnum):
@@ -13,10 +16,6 @@ class AccountType(PyEnum):
     LIABILITY = "liability"
     INCOME = "income"
     EXPENSE = "expense"
-
-
-class Base(DeclarativeBase):
-    pass
 
 
 class Account(Base):
@@ -28,6 +27,7 @@ class Account(Base):
     tag = Column(String(64), nullable=False)
 
     splits = relationship("Split", back_populates="account")
+    description_expense_mappings = relationship("DescriptionExpenseMapping", back_populates="expense_account")
 
     @property
     def name(self) -> str:
@@ -39,10 +39,13 @@ class Account(Base):
 
 class Transaction(Base):
     __tablename__ = "transactions"
+    __table_args__ = (UniqueConstraint("external_reference", name="uq_transaction_external_reference"),)
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    timestamp = Column(DateTime, default=datetime.utcnow(), nullable=False)
-    description = Column(String(256))
+    timestamp = Column(DateTime, default=datetime.now(timezone.utc), nullable=False)
+    external_reference = Column(String(256), nullable=False, unique=True)
+    description = Column(String(256), nullable=True)
+    currency = Column(String(3), nullable=True, default="USD")
 
     splits = relationship("Split", back_populates="transaction", cascade="all, delete-orphan")
 
@@ -65,38 +68,15 @@ class Split(Base):
         return f"<Split account_id={self.account_id} amount={self.amount}>"
 
 
-def _check_splits_balance(splits: list[tuple[int, Decimal]]) -> None:
-    """Raise ValueError if sum of amounts is not zero (invalid double-entry transaction)."""
-    return sum([amt for _, amt in splits])
+class DescriptionExpenseMapping(Base):
+    __tablename__ = "description_expense_mappings"
+    __table_args__ = (UniqueConstraint("description", name="uq_description_expense_description"),)
 
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    description = Column(String(256), nullable=False, unique=True)
+    expense_account_id = Column(Integer, ForeignKey("accounts.id"), nullable=False)
 
-def _check_splits_account_ids(splits: list[tuple[int, Decimal]], session) -> None:
-    """Raise ValueError if any account id does not exist."""
-    missing_account_ids = []
-    for account_id, _ in splits:
-        if session.query(Account).filter(Account.id == account_id).first() is None:
-            missing_account_ids.append(account_id)
-    if missing_account_ids:
-        raise ValueError(f"Account(s) {', '.join(missing_account_ids)} do not exist")
+    expense_account = relationship("Account", back_populates="description_expense_mappings")
 
-
-def create_transaction(
-    session,
-    description: str,
-    splits: list[tuple[int, Decimal]],
-) -> Transaction:
-    """
-    Create a transaction with the given splits. Raises ValueError if splits do not sum to zero.
-    splits: list of (account_id, amount) with amount positive for Debit, negative for Credit.
-    """
-    _check_splits_balance(splits)
-    _check_splits_account_ids(splits, session)
-
-    tx = Transaction(description=description)
-    session.add(tx)
-    session.flush()
-    for account_id, amount in splits:
-        session.add(
-            Split(transaction_id=tx.id, account_id=account_id, amount=amount)
-        )
-    return tx
+    def __repr__(self) -> str:
+        return f"<DescriptionExpenseMapping {self.description!r} -> expense_account_id={self.expense_account_id}>"

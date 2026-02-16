@@ -1,27 +1,51 @@
 """
 Example: salary income and rent expense.
-Income increases Income:all; rent is Expense:all. Cleaned expenses show only rent.
+Same scenario as before, now via the REST API with an ephemeral DB.
 """
 
 from decimal import Decimal
 
-from accounting.reports import get_cleaned_expenses
-from accounting.test.examples import rent_payment, salary_income
-from accounting.test.helpers import temporary_ledger_db
+from accounting.test.api_helpers import (
+    temporary_api_client,
+    create_account,
+    get_balance,
+    post_splits,
+    get_expenses_report,
+)
 
 
 def main() -> None:
-    with temporary_ledger_db() as session:
-        # Salary: bank +3000, income +3000
-        salary_income(session, Decimal("3000"))
+    with temporary_api_client() as client:
+        bank = create_account(client, "asset", "bank")
+        income_all = create_account(client, "income", "all")
+        expense_all = create_account(client, "expense", "all")
+
+        # Salary: bank +3000, income -3000
+        post_splits(
+            client,
+            "Salary",
+            [
+                (bank["id"], "3000"),
+                (income_all["id"], "-3000"),
+            ],
+        )
 
         # Rent: bank -1200, expense +1200
-        rent_payment(session, Decimal("1200"))
+        post_splits(
+            client,
+            "Rent payment",
+            [
+                (bank["id"], "-1200"),
+                (expense_all["id"], "1200"),
+            ],
+        )
 
-        report = get_cleaned_expenses(session)
-        row = report[report["account_name"] == "expense:all"]
-        assert not row.empty and row["amount"].iloc[0] == 1200
-        print("[OK] example_salary_rent: cleaned expenses show expense:all = 1200")
+        report = get_expenses_report(client)
+        row = next(r for r in report if r["account_name"] == "expense:all")
+        assert row["amount"] == 1200
+        assert get_balance(client, bank["id"]) == 1800
+
+        print("[OK] test_income_expense: cleaned expenses show expense:all = 1200")
 
 
 if __name__ == "__main__":
