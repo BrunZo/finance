@@ -2,11 +2,12 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 from bonds.bonds import Bond
+from rates.compound import yearly_discount
 
 
 def plot_price_yield(ax: plt.Axes, bond: Bond):
     yields = np.linspace(0, 1, 100)
-    prices = [bond.present_value(y) for y in yields]
+    prices = [bond.present_value(yearly_discount, y=y) for y in yields]
     ax.plot(yields, prices, label=bond.name)
       
 

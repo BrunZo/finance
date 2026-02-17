@@ -1,8 +1,9 @@
 from dataclasses import dataclass
 
 from investing.asset import Asset
-from math_utils.newton_raphson import bisect
-from cf.cash_flow import Point, CashFlow
+from cf.cash_flow import Point
+from rates.compound import continous_discount, yearly_discount
+from rates.time import Time
 
 @dataclass
 class Bond(Asset):
@@ -18,7 +19,7 @@ class Bond(Asset):
         self.m = m
         cash_flow = [
             Point(
-                k / self.m, 
+                Time(k / self.m), 
                 self.coupon_rate / self.m * self.face_value
             ) for k in range(self.periods)
         ]
@@ -28,5 +29,5 @@ class Bond(Asset):
 
 if __name__ == "__main__":
     example_bond = Bond(0.01, 100, 20, 2, "Example Bond")
-    print(example_bond.yield_from_price(90))
-    print(example_bond.modified_duration(0.05))
+    print(example_bond.present_value(yearly_discount, y=0.04))
+    print(example_bond.present_value(continous_discount, y=0.04))
