@@ -1,3 +1,4 @@
+import math
 from dataclasses import dataclass
 from typing import List
 
@@ -9,11 +10,21 @@ class Point:
     time: float
     value: float
 
-    def _discount(self, y: float) -> float:
-        return 1 / (1 + y) ** self.time
+    def _discount(self, y: float, nominal=False) -> float:
+        if not nominal:
+            return 1 / (1 + y) ** self.time
 
-    def present_value(self, y: float) -> float:
-        return self.value * self._discount(y)
+        whole_years = math.floor(self.time)
+        discount = 1 / (1 + y) ** whole_years
+        
+        remainder = self.time - whole_years
+        if remainder != 0:
+            discount *= 1 / (1 + y * remainder)
+        
+        return discount 
+
+    def present_value(self, y: float, nominal=False) -> float:
+        return self.value * self._discount(y, nominal=nominal)
 
 
 @dataclass
@@ -29,9 +40,12 @@ class CashFlow:
             0, 1, 10 ** (-9)
         )
 
-    def present_value(self, r: float) -> float:
-        return sum(point.present_value(r) for point in self.cash_flow)
-
+    def present_value(self, r: float, nominal=False) -> float:
+        return sum(
+            point.present_value(r, nominal=nominal) 
+            for point in self.cash_flow
+        )
+    
     def duration(self, r: float) -> float:
         return sum(point.time * point.present_value(r) for point in self.cash_flow) / self.present_value(r)
 
