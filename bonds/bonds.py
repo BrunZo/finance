@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from investing.asset import Asset
 from cf.cash_flow import Point
 from rates.compound import continous_discount, yearly_discount
+from rates.discount_context import DiscountContext
 from rates.time import Time
 
 @dataclass
@@ -29,5 +30,5 @@ class Bond(Asset):
 
 if __name__ == "__main__":
     example_bond = Bond(0.01, 100, 20, 2, "Example Bond")
-    print(example_bond.present_value(yearly_discount, y=0.04))
-    print(example_bond.present_value(continous_discount, y=0.04))
+    print(example_bond.present_value(DiscountContext(yearly_discount, kwargs={"y": 0.04})))
+    print(example_bond.present_value(DiscountContext(continous_discount, kwargs={"y": 0.04})))

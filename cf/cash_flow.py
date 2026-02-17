@@ -1,7 +1,7 @@
 from dataclasses import dataclass
-from typing import Any, Callable, List
+from typing import List
 
-from math_utils.newton_raphson import bisect
+from rates.discount_context import DiscountContext
 from rates.time import Time
 
 
@@ -10,13 +10,8 @@ class Point:
     time: Time
     value: float
 
-    def present_value(
-        self, 
-        discount: Callable[[Time, Time, Any], float],
-        now: Time = Time(),
-        **kwargs,
-    ) -> float:
-        return self.value * discount(self.time, now, **kwargs)
+    def present_value(self, policy: DiscountContext) -> float:
+        return self.value * policy(self.time)
 
 
 @dataclass
@@ -29,22 +24,18 @@ class CashFlow:
     def length(self) -> int:
         return len(self.cash_flow)
 
-    def present_value(self, discount, now = Time(), **kwargs) -> float:
-        return sum(
-            point.present_value(discount, now, **kwargs) 
-            for point in self.cash_flow
-        )
-    
-    def duration(self, discount, now = Time(), **kwargs) -> float:
-        return sum(
-            point.time.time * point.present_value(discount, now, **kwargs) 
-            for point in self.cash_flow
-        ) / self.present_value(discount, now, **kwargs)
+    def present_value(self, policy: DiscountContext) -> float:
+        return sum(point.present_value(policy) for point in self.cash_flow)
 
-    def modified_duration(self, discount, now = Time(), **kwargs) -> float:
-        pass 
+    def duration(self, policy: DiscountContext) -> float:
+        return sum(
+            point.time.time * point.present_value(policy) for point in self.cash_flow
+        ) / self.present_value(policy)
+
+    def modified_duration(self, policy: DiscountContext) -> float:
+        pass
         # TODO
 
-    def convexity(self, discount, now = Time(), **kwargs) -> float:
+    def convexity(self, policy: DiscountContext) -> float:
         pass
         # TODO

@@ -4,26 +4,23 @@ import numpy as np
 
 from investing.asset import Asset
 from investing.portfolio import Portfolio
-from rates.time import Time
-from typing import Callable, Any
+from rates.discount_context import DiscountContext
 
 
 def immunize(
     portfolio: Portfolio,
     available_assets: List[Asset],
-    discount: Callable[[Time, Time, Any], float],
-    now: Time = Time(),
-    **kwargs,
+    policy: DiscountContext,
 ):
     """
     Immunize the portfolio to the given yield rate.
     Naively implemented for integer solutions.
     """
-    target_pv = -portfolio.present_value(discount, now, **kwargs)
-    target_duration = portfolio.duration(discount, now, **kwargs)
+    target_pv = -portfolio.present_value(policy)
+    target_duration = portfolio.duration(policy)
 
-    pvs = np.array([a.present_value(discount, now, **kwargs) for a in available_assets])
-    durations = np.array([a.duration(discount, now, **kwargs) for a in available_assets])
+    pvs = np.array([a.present_value(policy) for a in available_assets])
+    durations = np.array([a.duration(policy) for a in available_assets])
 
     # System: sum(amount_i * pv_i) = target_pv
     #         sum(amount_i * pv_i * duration_i) = target_duration * target_pv

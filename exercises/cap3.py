@@ -8,6 +8,7 @@ from investing.immunization import immunize
 from investing.portfolio import Portfolio
 from math_utils.newton_raphson import bisect
 from rates.compound import yearly_discount
+from rates.discount_context import DiscountContext
 from rates.time import Time
 
 # Exercise 1: Amortization
@@ -17,7 +18,7 @@ interest_rate = .07
 ans = 12 * bisect(
     lambda r: CashFlow([
         Point(Time((i + 1) / 12), r) for i in range(periods)
-    ]).present_value(yearly_discount, y=interest_rate) - total_debt,
+    ]).present_value(DiscountContext(yearly_discount, kwargs={"y": interest_rate})) - total_debt,
     0, 100000, 10 ** (-9)
 )
 print(f"Monthly payments = $ {ans:.4f}")
@@ -34,9 +35,9 @@ print(f"Life expectancy = {life_expectancy:.2f} years")
 annual_payment = 10000
 interest_rate = .08
 
-def present_value_till_age(age: int) -> CashFlow:
+def present_value_till_age(age: int) -> float:
     cf = CashFlow([Point(Time(a + 1), annual_payment) for a in range(current_age, age)])
-    return cf.present_value(yearly_discount, now=Time(current_age), y=interest_rate)
+    return cf.present_value(DiscountContext(yearly_discount, now=Time(current_age), kwargs={"y": interest_rate}))
 
 def int_average(t: float, fn: Callable[int, float]) -> float:
     if t == math.floor(t):
@@ -57,7 +58,7 @@ print(f"Expected present value = $ {expected_present_value:.2f}")
 
 # Exercise 9
 bond = Bond(0.08, 100, 10, 1, "10y 8% Bond")
-print(f"Duration = {bond.duration(yearly_discount, y=0.1):.2f}")
+print(f"Duration = {bond.duration(DiscountContext(yearly_discount, kwargs={"y": 0.1})):.2f}")
 
 # Exercise 12
 bond_A = Asset([
@@ -78,13 +79,14 @@ bond_C = Asset([
 bond_D = Asset([Point(Time(1), 1000)], "Bond D")
 all_bonds = [bond_A, bond_B, bond_C, bond_D]
 yield_rate = 0.15
+policy = DiscountContext(yearly_discount, now=Time(2), kwargs={"y": yield_rate})
 for bond in all_bonds:
     print(f"Bond {bond.name}")
-    print(f"   price = {bond.present_value(yearly_discount, y=yield_rate):.2f}")
-    print(f"   duration = {bond.duration(yearly_discount, y=yield_rate):.2f}")
+    print(f"   price = {bond.present_value(policy):.2f}")
+    print(f"   duration = {bond.duration(policy):.2f}")
 
 portfolio = Portfolio([
     Asset([Point(Time(2), -20000)], "Payment Obligation")
 ])
-immunize(portfolio, all_bonds, yearly_discount, now=Time(2), y=yield_rate)
+immunize(portfolio, all_bonds, policy)
 print(f"Immunized portfolio: {portfolio}")

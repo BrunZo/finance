@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from typing import List
 
 from investing.asset import Asset
-from rates.time import Time
+from rates.discount_context import DiscountContext
 
 
 @dataclass
@@ -12,17 +12,17 @@ class Portfolio:
     def __init__(self, assets: List[Asset]):
         self.assets = assets
 
-    def present_value(self, discount, now = Time(), **kwargs) -> float:
-        return sum(asset.present_value(discount, now, **kwargs) for asset in self.assets)
+    def present_value(self, policy: DiscountContext) -> float:
+        return sum(asset.present_value(policy) for asset in self.assets)
 
-    def duration(self, discount, now = Time(), **kwargs) -> float:
-        return sum(asset.duration(discount, now, **kwargs) for asset in self.assets)
+    def duration(self, policy: DiscountContext) -> float:
+        return sum(asset.duration(policy) for asset in self.assets)
 
-    def modified_duration(self, discount, now = Time(), **kwargs) -> float:
-        return sum(asset.modified_duration(discount, now, **kwargs) for asset in self.assets)
+    def modified_duration(self, policy: DiscountContext) -> float:
+        return sum(asset.modified_duration(policy) for asset in self.assets)
 
-    def convexity(self, discount, now = Time(), **kwargs) -> float:
-        return sum(asset.convexity(discount, now, **kwargs) for asset in self.assets)
+    def convexity(self, policy: DiscountContext) -> float:
+        return sum(asset.convexity(policy) for asset in self.assets)
 
     def __str__(self) -> str:
         s = ""
