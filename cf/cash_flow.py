@@ -34,6 +34,9 @@ class CashFlow:
     def __init__(self, cash_flow: List[Point]):
         self.cash_flow = cash_flow
 
+    def length(self) -> int:
+        return len(self.cash_flow)
+
     def yield_from_price(self, p: float) -> float:
         return bisect(
             lambda r: self.present_value(r) - p,

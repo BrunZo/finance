@@ -3,6 +3,9 @@ from typing import Callable
 
 from bonds.bonds import Bond
 from cf.cash_flow import CashFlow, Point
+from investing.asset import Asset
+from investing.immunization import immunize
+from investing.portfolio import Portfolio
 from math_utils.newton_raphson import bisect
 
 # Exercise 1: Amortization
@@ -52,3 +55,33 @@ print(f"Expected present value = $ {expected_present_value:.2f}")
 # Exercise 9
 bond = Bond(0.08, 100, 10, 1, "10y 8% Bond")
 print(f"Duration = {bond.duration(0.1):.2f}")
+
+# Exercise 12
+bond_A = Asset([
+    Point(1, 100),
+    Point(2, 100),
+    Point(3, 100 + 1000),
+], "Bond A")
+bond_B = Asset([
+    Point(1, 50),
+    Point(2, 50),
+    Point(3, 50 + 1000),
+], "Bond B")
+bond_C = Asset([
+    Point(1, 0),
+    Point(2, 0),
+    Point(3, 0 + 1000),
+], "Bond C")
+bond_D = Asset([Point(1, 1000)], "Bond D")
+all_bonds = [bond_A, bond_B, bond_C, bond_D]
+yield_rate = 0.15
+for bond in all_bonds:
+    print(f"Bond {bond.name}")
+    print(f"   price = {bond.present_value(yield_rate):.2f}")
+    print(f"   duration = {bond.duration(yield_rate):.2f}")
+
+portfolio = Portfolio([
+    Asset([Point(2, -20000)], "Payment Obligation")
+])
+immunize(portfolio, all_bonds, yield_rate)
+print(f"Immunized portfolio: {portfolio}")
