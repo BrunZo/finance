@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 
-from ..math.newton_raphson import bisect
-from ..cf.cash_flow import CashFlow
+from math_utils.newton_raphson import bisect
+from cf.cash_flow import Point, CashFlow
 
 @dataclass
 class Bond:
@@ -12,7 +12,7 @@ class Bond:
 
     def cash_flow(self) -> CashFlow:
         cash_flow = [
-            CashFlow.Point(k, self.coupon_rate / self.m * self.face_value) for k in range(self.periods)
+            Point(k, self.coupon_rate / self.m * self.face_value) for k in range(self.periods)
         ]
         cash_flow[-1].value += self.face_value
         return CashFlow(cash_flow)
@@ -30,11 +30,13 @@ class Bond:
         return self.cash_flow().duration(y / self.m)
 
     def modified_duration(self, y: float) -> float:
-        _duration = self.duration(y) / self.m
-        factor = 1 / (1 + y / self.m)
-        return factor * _duration
+        return self.cash_flow().modified_duration(y / self.m)
 
-example_bond = Bond(0.01, 100, 20, 2)
+    def convexity(self, y: float) -> float:
+        return self.cash_flow().convexity(y / self.m)
 
-print(example_bond.yield_from_price(90))
-print(example_bond.modified_duration(0.05))
+
+if __name__ == "__main__":
+    example_bond = Bond(0.01, 100, 20, 2)
+    print(example_bond.yield_from_price(90))
+    print(example_bond.modified_duration(0.05))

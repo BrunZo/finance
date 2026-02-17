@@ -2,9 +2,8 @@
 tags:
   - finance
 section: "1.2"
-aliases:
-  - F3
 ---
+
 Money becomes inherently less valuable with time. We define the **interest rate** as the rate at which this happens.
 
 For example a 1-year loan can have 10% interest rate, meaning that having the money now is 10% more valuable as having it 1 year into the future. This means that today's $100\$$ are as *exactly as valuable* as next year's $110\$$. 
