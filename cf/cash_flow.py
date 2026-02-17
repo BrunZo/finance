@@ -1,6 +1,8 @@
 from dataclasses import dataclass
 from typing import List
 
+from math_utils.newton_raphson import bisect
+
 
 @dataclass
 class Point:
@@ -20,6 +22,12 @@ class CashFlow:
 
     def __init__(self, cash_flow: List[Point]):
         self.cash_flow = cash_flow
+
+    def yield_from_price(self, p: float) -> float:
+        return bisect(
+            lambda r: self.present_value(r) - p,
+            0, 1, 10 ** (-9)
+        )
 
     def present_value(self, r: float) -> float:
         return sum(point.present_value(r) for point in self.cash_flow)
