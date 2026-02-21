@@ -1,20 +1,23 @@
-"""Services for description -> expense account mappings."""
+"""Services for description -> account mappings (any account type)."""
 
 from sqlalchemy.orm import Session
 
-from accounting.models import Account, AccountType, DescriptionExpenseMapping, Transaction
+from accounting.models import Account, AccountType, DescriptionAccountMapping, Transaction
 
 
-def _check_expense_account(session: Session, expense_account_id: int) -> Account:
-    account = session.query(Account).filter(Account.id == expense_account_id).first()
+def _check_account(session: Session, account_id: int) -> Account:
+    account = session.query(Account).filter(Account.id == account_id).first()
     if account is None:
-        raise ValueError(f"Account {expense_account_id} not found")
-    if account.account_type != AccountType.EXPENSE:
-        raise ValueError(f"Account {expense_account_id} is not an expense account")
+        raise ValueError(f"Account {account_id} not found")
     return account
 
 
-def _apply_mapping_to_transactions(session: Session, description: str, expense_account_id: int) -> None:
+def _apply_mapping_to_transactions(session: Session, description: str, account_id: int) -> None:
+    """
+    Update transactions with matching description: set the categorizable split
+    to the mapped account. Updates: expense/income/liability splits, or asset splits
+    with tag 'uncategorized' (e.g. transfers).
+    """
     if not (description and description.strip()):
         return
     transactions = (
@@ -24,40 +27,46 @@ def _apply_mapping_to_transactions(session: Session, description: str, expense_a
     )
     for tx in transactions:
         for split in tx.splits:
-            if (
-                split.account
-                and split.account.account_type == AccountType.EXPENSE
-                and split.account_id != expense_account_id
-            ):
-                split.account_id = expense_account_id
+            if split.account_id == account_id:
+                continue
+            if not split.account:
+                continue
+            # Update categorizable splits: non-asset, or asset:uncategorized (transfers)
+            is_categorizable = (
+                split.account.account_type != AccountType.ASSET
+                or split.account.tag == "uncategorized"
+                or split.account.tag.startswith("uncategorized:")
+            )
+            if is_categorizable:
+                split.account_id = account_id
     session.flush()
 
 
 def insert_mapping(
     session: Session,
     description: str,
-    expense_account_id: int,
-) -> DescriptionExpenseMapping:
-    expense_account = _check_expense_account(session, expense_account_id)
-    m = DescriptionExpenseMapping(description=description, expense_account=expense_account)
+    account_id: int,
+) -> DescriptionAccountMapping:
+    account = _check_account(session, account_id)
+    m = DescriptionAccountMapping(description=description, account=account)
     session.add(m)
     session.flush()
-    _apply_mapping_to_transactions(session, description, expense_account_id)
+    _apply_mapping_to_transactions(session, description, account_id)
     return m
 
 
-def list_mappings(session: Session) -> list[DescriptionExpenseMapping]:
+def list_mappings(session: Session) -> list[DescriptionAccountMapping]:
     return (
-        session.query(DescriptionExpenseMapping)
-        .order_by(DescriptionExpenseMapping.description)
+        session.query(DescriptionAccountMapping)
+        .order_by(DescriptionAccountMapping.description)
         .all()
     )
 
 
-def mapping_by_description(session: Session, description: str) -> DescriptionExpenseMapping:
+def mapping_by_description(session: Session, description: str) -> DescriptionAccountMapping:
     return (
-        session.query(DescriptionExpenseMapping)
-        .filter(DescriptionExpenseMapping.description == description)
+        session.query(DescriptionAccountMapping)
+        .filter(DescriptionAccountMapping.description == description)
         .first()
     )
 
@@ -65,38 +74,38 @@ def mapping_by_description(session: Session, description: str) -> DescriptionExp
 def update_mapping(
     session: Session,
     description: str,
-    expense_account_id: int,
-) -> DescriptionExpenseMapping:
-    expense_account = _check_expense_account(session, expense_account_id)
-    m = session.query(DescriptionExpenseMapping).filter(DescriptionExpenseMapping.description == description).first()
+    account_id: int,
+) -> DescriptionAccountMapping:
+    account = _check_account(session, account_id)
+    m = session.query(DescriptionAccountMapping).filter(DescriptionAccountMapping.description == description).first()
     if m is None:
         raise ValueError(f"Description {description} not found")
-    m.expense_account = expense_account
+    m.account = account
     session.flush()
-    _apply_mapping_to_transactions(session, description, expense_account_id)
+    _apply_mapping_to_transactions(session, description, account_id)
     return m
 
 
-def update_mapping_by_id(session: Session, mapping_id: int, expense_account_id: int) -> DescriptionExpenseMapping:
-    m = session.query(DescriptionExpenseMapping).filter(DescriptionExpenseMapping.id == mapping_id).first()
+def update_mapping_by_id(session: Session, mapping_id: int, account_id: int) -> DescriptionAccountMapping:
+    m = session.query(DescriptionAccountMapping).filter(DescriptionAccountMapping.id == mapping_id).first()
     if m is None:
         raise ValueError(f"Mapping {mapping_id} not found")
-    expense_account = _check_expense_account(session, expense_account_id)
-    m.expense_account = expense_account
+    account = _check_account(session, account_id)
+    m.account = account
     session.flush()
-    _apply_mapping_to_transactions(session, m.description, expense_account_id)
+    _apply_mapping_to_transactions(session, m.description, account_id)
     return m
 
 
-def upsert_mapping(session: Session, description: str, expense_account_id: int) -> DescriptionExpenseMapping:
-    m = session.query(DescriptionExpenseMapping).filter(DescriptionExpenseMapping.description == description).first()
+def upsert_mapping(session: Session, description: str, account_id: int) -> DescriptionAccountMapping:
+    m = session.query(DescriptionAccountMapping).filter(DescriptionAccountMapping.description == description).first()
     if m is None:
-        return insert_mapping(session, description, expense_account_id)
-    return update_mapping(session, description, expense_account_id)
+        return insert_mapping(session, description, account_id)
+    return update_mapping(session, description, account_id)
 
 
 def delete_mapping(session: Session, mapping_id: int) -> bool:
-    m = session.query(DescriptionExpenseMapping).filter(DescriptionExpenseMapping.id == mapping_id).first()
+    m = session.query(DescriptionAccountMapping).filter(DescriptionAccountMapping.id == mapping_id).first()
     if m is None:
         return False
     session.delete(m)

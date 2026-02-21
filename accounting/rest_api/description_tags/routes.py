@@ -1,4 +1,4 @@
-"""API for mapping transaction descriptions to expense tags (exact match)."""
+"""API for mapping transaction descriptions to accounts (exact match, any account type)."""
 
 from typing import Annotated
 
@@ -13,32 +13,32 @@ router = APIRouter(prefix="/description-tags", tags=["description-tags"])
 SessionDep = Annotated[Session, Depends(get_db)]
 
 
-@router.post("", response_model=schemas.DescriptionExpenseMappingOut)
+@router.post("", response_model=schemas.DescriptionAccountMappingOut)
 def insert_mapping(
-    req: schemas.DescriptionExpenseMappingUpsert,
+    req: schemas.DescriptionAccountMappingUpsert,
     session: SessionDep,
-) -> schemas.DescriptionExpenseMappingOut:
-    m = try_run(services.insert_mapping, session, req.description, req.expense_account_id)
-    return schemas.DescriptionExpenseMappingOut.from_model(m)
+) -> schemas.DescriptionAccountMappingOut:
+    m = try_run(services.insert_mapping, session, req.description, req.account_id)
+    return schemas.DescriptionAccountMappingOut.from_model(m)
 
 
-@router.get("", response_model=list[schemas.DescriptionExpenseMappingOut])
-def list_mappings(session: SessionDep) -> list[schemas.DescriptionExpenseMappingOut]:
+@router.get("", response_model=list[schemas.DescriptionAccountMappingOut])
+def list_mappings(session: SessionDep) -> list[schemas.DescriptionAccountMappingOut]:
     rows = services.list_mappings(session)
     return [
-        schemas.DescriptionExpenseMappingOut.from_model(m)
+        schemas.DescriptionAccountMappingOut.from_model(m)
         for m in rows
     ]
 
 
-@router.patch("/{mapping_id}", response_model=schemas.DescriptionExpenseMappingOut)
+@router.patch("/{mapping_id}", response_model=schemas.DescriptionAccountMappingOut)
 def update_mapping(
     mapping_id: int,
-    req: schemas.DescriptionExpenseMappingUpsert,
+    req: schemas.DescriptionAccountMappingUpsert,
     session: SessionDep,
-) -> schemas.DescriptionExpenseMappingOut:
-    m = try_run(services.update_mapping_by_id, session, mapping_id, req.expense_account_id)
-    return schemas.DescriptionExpenseMappingOut.from_model(m)
+) -> schemas.DescriptionAccountMappingOut:
+    m = try_run(services.update_mapping_by_id, session, mapping_id, req.account_id)
+    return schemas.DescriptionAccountMappingOut.from_model(m)
 
 
 @router.delete("/{mapping_id}")

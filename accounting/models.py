@@ -27,7 +27,9 @@ class Account(Base):
     tag = Column(String(64), nullable=False)
 
     splits = relationship("Split", back_populates="account")
-    description_expense_mappings = relationship("DescriptionExpenseMapping", back_populates="expense_account")
+    description_account_mappings = relationship(
+        "DescriptionAccountMapping", back_populates="account"
+    )
 
     @property
     def name(self) -> str:
@@ -68,15 +70,15 @@ class Split(Base):
         return f"<Split account_id={self.account_id} amount={self.amount}>"
 
 
-class DescriptionExpenseMapping(Base):
-    __tablename__ = "description_expense_mappings"
-    __table_args__ = (UniqueConstraint("description", name="uq_description_expense_description"),)
+class DescriptionAccountMapping(Base):
+    __tablename__ = "description_account_mappings"
+    __table_args__ = (UniqueConstraint("description", name="uq_description_account_description"),)
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     description = Column(String(256), nullable=False, unique=True)
-    expense_account_id = Column(Integer, ForeignKey("accounts.id"), nullable=False)
+    account_id = Column(Integer, ForeignKey("accounts.id"), nullable=False)
 
-    expense_account = relationship("Account", back_populates="description_expense_mappings")
+    account = relationship("Account", back_populates="description_account_mappings")
 
     def __repr__(self) -> str:
-        return f"<DescriptionExpenseMapping {self.description!r} -> expense_account_id={self.expense_account_id}>"
+        return f"<DescriptionAccountMapping {self.description!r} -> account_id={self.account_id}>"

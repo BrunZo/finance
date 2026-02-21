@@ -69,11 +69,15 @@ def list_transactions(session: Session) -> list[Transaction]:
 
 
 def list_uncategorized_transactions(session: Session) -> list[Transaction]:
+    """List transactions with uncategorized splits (expense or income)."""
     tx_list = (
         session.query(Transaction)
         .join(Split, Transaction.id == Split.transaction_id)
         .join(Account, Split.account_id == Account.id)
-        .filter(Account.account_type == AccountType.EXPENSE, Account.tag == "uncategorized")
+        .filter(
+            Account.tag == "uncategorized",
+            Account.account_type.in_([AccountType.EXPENSE, AccountType.INCOME]),
+        )
         .distinct()
         .order_by(Transaction.timestamp.desc(), Transaction.id.desc())
         .all()

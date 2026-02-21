@@ -2,8 +2,6 @@
 PDF table extraction by section titles. Always uses explicit vertical lines from header row.
 """
 
-MARGIN = 10
-
 
 def find_text(
     pdf, text: str, ref_page: int | None = None, ref_bbox: dict | None = None
@@ -77,7 +75,7 @@ def extract_table_between(
     end: tuple[int, dict],
     table_config: dict,
     *,
-    margin: float = MARGIN,
+    margin: float = 10,
     snap_tolerance: float = 10,
     offset: float = -10,
 ) -> list[list]:

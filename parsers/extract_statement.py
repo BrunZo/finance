@@ -25,22 +25,28 @@ def _write_csv(path: Path, rows: list[list]) -> None:
         )
 
 
-def load_tables_config(path: Path) -> list[dict]:
+def load_tables_config(path: Path) -> dict:
+    """Load config with optional general section and tables list."""
     with open(path, encoding="utf-8") as f:
-        return yaml.safe_load(f)
+        raw = yaml.safe_load(f)
+    return raw
 
 
 def process_pdf(
     tables: list[dict],
     pdf_path: Path,
     out_dir: Path,
+    opts: dict,
     *,
-    snap_tolerance: float = 10,
-    offset: float = -10,
+    verbose: bool = True,
 ) -> None:
     """Find each section title in order, then extract table between consecutive pairs using explicit columns."""
+    snap_tolerance = opts["snap_tolerance"]
+    offset = opts["offset"]
+    margin = opts["margin"]
+
     pdf = pdfplumber.open(pdf_path)
-    
+
     headers = []
     ref_page, ref_bbox = None, None
     for t in tables:
@@ -49,20 +55,27 @@ def process_pdf(
         if hit:
             ref_page, ref_bbox = hit
 
-    for i in range(len(headers) - 1):
-        start, end = headers[i], headers[i + 1]
+    last_page_idx = len(pdf.pages) - 1
+    last_page = pdf.pages[last_page_idx]
+    doc_end = (last_page_idx, {"top": last_page.height, "bottom": last_page.height})
+
+    for i in range(len(headers)):
+        start = headers[i]
+        end = headers[i + 1] if i + 1 < len(headers) else doc_end
         if tables[i].get("parse") is False:
+            continue
+        if start is None:
             continue
         table = extract_table_between(
             pdf, start, end, tables[i],
-            snap_tolerance=snap_tolerance, offset=offset,
+            snap_tolerance=snap_tolerance, offset=offset, margin=margin,
         )
         if table:
-            title = tables[i]["title"]
-            print(f"  — {title}: {len(table)} rows")
-            out_name = f"{_safe_name(pdf_path.stem)}_{_safe_name(title)}.csv"
+            name = tables[i].get("name") or tables[i]["title"]
+            out_name = f"{_safe_name(pdf_path.stem)}_{_safe_name(name)}.csv"
             _write_csv(out_dir / out_name, table)
-            print(f"    -> {out_dir / out_name}")
+            if verbose:
+                print(f"  {name}: {len(table)} rows → {out_name}")
 
 
 def main() -> None:
@@ -70,19 +83,16 @@ def main() -> None:
     parser.add_argument("path", type=Path, help="PDF path or glob (e.g. *.pdf or statements/**/*.pdf)")
     parser.add_argument("--config", "-c", type=Path, required=True, help="Path to tables YAML config")
     parser.add_argument("--out-dir", "-o", type=Path, required=True, help="Output directory")
-    parser.add_argument("--snap-tolerance", type=float, default=10)
-    parser.add_argument("--offset", type=float, default=-10)
     args = parser.parse_args()
 
     pdf_paths = sorted(args.path.parent.glob(args.path.name))
-    tables = load_tables_config(args.config)
-    
+    cfg = load_tables_config(args.config)
+    general = cfg["general"]
+    tables = cfg["tables"]
+
     for pdf_path in pdf_paths:
-        print(pdf_path)
-        process_pdf(
-            tables, pdf_path, args.out_dir,
-            snap_tolerance=args.snap_tolerance, offset=args.offset,
-        )
+        print(pdf_path.name)
+        process_pdf(tables, pdf_path, args.out_dir, opts=general)
 
 
 if __name__ == "__main__":
