@@ -27,9 +27,13 @@ def _parse_sp_amount(raw: str) -> str | None:
     return str(round(float(s), 2))
 
 def _parse_date_iso(raw: str) -> str | None:
-    """Parse to YYYY-MM-DD."""
     s = raw.strip()
     dt = datetime.strptime(s, '%Y-%m-%d')
+    return dt.strftime("%Y-%m-%d")
+
+def _parse_date_sp(raw: str) -> str | None:
+    s = raw.strip()
+    dt = datetime.strptime(s, '%d-%m-%y')
     return dt.strftime("%Y-%m-%d")
 
 def _parse_str(raw: str) -> str:
@@ -43,25 +47,84 @@ PARSERS: dict[str, Callable[[str], Any]] = {
     "str": _parse_str,
     "sp_amt": _parse_sp_amount,
     "date_iso": _parse_date_iso,
+    "date_sp": _parse_date_sp,
     "date yyyy-mm-dd": _parse_date_iso,
 }
 
 
 def load_parse_config(path: Path | str) -> dict:
-    """Load parse config YAML. Must have 'columns' and 'amount_from'."""
+    """Load parse config YAML. Must have 'columns' and either 'amount_from' or 'debit_credit'."""
     with open(path, encoding="utf-8") as f:
         cfg = yaml.safe_load(f)
     if not cfg or "columns" not in cfg:
         raise ValueError("Config must have 'columns' list")
-    if "amount_from" not in cfg:
-        raise ValueError("Config must have 'amount_from' (dst → currency)")
+    has_amount_from = bool(cfg.get("amount_from"))
+    has_debit_credit = bool(cfg.get("debit_credit"))
+    if not has_amount_from and not has_debit_credit:
+        raise ValueError("Config must have 'amount_from' or 'debit_credit'")
+    if has_amount_from and has_debit_credit:
+        raise ValueError("Config cannot have both 'amount_from' and 'debit_credit'")
     return cfg
+
+
+def _derive_amount_amount_from(
+    parsed: dict[str, Any], amount_from: dict[str, str]
+) -> tuple[str | None, str | None]:
+    """Amount from multi-currency columns (first non-empty positive wins)."""
+    for dst, curr in amount_from.items():
+        val = parsed.get(dst)
+        if val is None or val == "":
+            continue
+        try:
+            n = float(val)
+            if n > 0:
+                return str(round(n, 2)), curr
+        except (ValueError, TypeError):
+            continue
+    return None, None
+
+
+def _derive_amount_debit_credit(
+    parsed: dict[str, Any], debit_credit: dict, table_key: str | None = None,
+) -> tuple[str | None, str | None]:
+    """
+    Amount from debit/credit columns: one has value, other empty.
+    Debit (money out) → positive amount. Credit (money in) → negative amount.
+    """
+    debit_dst = debit_credit.get("debit") or debit_credit.get("debit_column")
+    credit_dst = debit_credit.get("credit") or debit_credit.get("credit_column")
+    currency = debit_credit.get("currency")
+    currency_by_table = debit_credit.get("currency_by_table") or {}
+    if table_key and table_key in currency_by_table:
+        currency = currency_by_table[table_key]
+    if not currency:
+        return None, None
+
+    val = parsed.get(debit_dst) if debit_dst else None
+    if val is not None and val != "":
+        try:
+            n = float(val)
+            if n > 0:
+                return str(round(n, 2)), currency
+        except (ValueError, TypeError):
+            pass
+
+    val = parsed.get(credit_dst) if credit_dst else None
+    if val is not None and val != "":
+        try:
+            n = float(val)
+            if n > 0:
+                return str(round(-n, 2)), currency
+        except (ValueError, TypeError):
+            pass
+    return None, None
 
 
 def parse_row_with_config(
     raw_row: dict[str, str],
     column_specs: list[dict],
-    amount_from: dict[str, str],
+    cfg: dict,
+    table_key: str | None = None,
 ) -> dict[str, str] | None:
     """
     Apply config to one raw CSV row. Returns parsed row with keys from PARSED_HEADER,
@@ -76,21 +139,12 @@ def parse_row_with_config(
         raw_val = raw_row.get(col)
         parsed[dst] = parser(raw_val)
 
-    # Derive amount + currency from amount_from (first non-empty positive wins)
-    amount_str = None
-    currency = None
-    for dst, curr in amount_from.items():
-        val = parsed.get(dst)
-        if val is None or val == "":
-            continue
-        try:
-            n = float(val)
-            if n > 0:
-                amount_str = str(round(n, 2))
-                currency = curr
-                break
-        except (ValueError, TypeError):
-            continue
+    if cfg.get("amount_from"):
+        amount_str, currency = _derive_amount_amount_from(parsed, cfg["amount_from"])
+    else:
+        amount_str, currency = _derive_amount_debit_credit(
+            parsed, cfg["debit_credit"], table_key
+        )
 
     if amount_str is None or currency is None:
         return None
@@ -108,23 +162,34 @@ def parse_row_with_config(
     }
 
 
+def _table_key_from_stem(stem: str) -> str | None:
+    """Extract table key from CSV stem, e.g. 'Estadodecuenta..._Movimientos' -> 'Movimientos'."""
+    if "_" in stem:
+        return stem.rsplit("_", 1)[-1]
+    return None
+
+
 def parse_extracted_csv(
     input_path: Path,
     config_path: Path,
+    table_key: str | None = None,
 ) -> list[dict]:
     """
     Read an extracted CSV and return parsed rows (date, description, ref, currency, amount).
+    table_key: optional table identifier for debit_credit.currency_by_table; defaults to stem suffix.
     """
     cfg = load_parse_config(config_path)
     column_specs = cfg["columns"]
-    amount_from = cfg["amount_from"]
+    key = table_key if table_key is not None else _table_key_from_stem(
+        Path(input_path).stem
+    )
 
     with open(input_path, newline="", encoding="utf-8") as f:
         rows = list(csv.DictReader(f))
 
     out = []
     for raw_row in rows:
-        row = parse_row_with_config(raw_row, column_specs, amount_from)
+        row = parse_row_with_config(raw_row, column_specs, cfg, table_key=key)
         if row is not None:
             out.append(row)
     return out
@@ -143,11 +208,14 @@ def parse_extracted_csv_to_file(
     input_path: Path,
     output_path: Path,
     config_path: Path,
+    *,
+    verbose: bool = True,
 ) -> Path:
     """Parse extracted CSV and write parsed CSV. Returns output path."""
     rows = parse_extracted_csv(input_path, config_path=config_path)
     write_parsed_csv(rows, output_path)
-    print(f"Parsed {input_path} -> {output_path} ({len(rows)} rows)")
+    if verbose:
+        print(f"  {input_path.name}: {len(rows)} rows")
     return output_path
 
 

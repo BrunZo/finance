@@ -2,7 +2,8 @@
 Load parsed statement CSVs into the ledger.
 
 Expects CSVs produced by parsers.parse (columns: date, description, ref, currency, amount).
-Each row becomes one transaction: credit bank asset, debit expense.
+Amount: positive = outflow, negative = inflow.
+Bank always gets amount; counter gets -amount. Positive → expense, negative → income.
 """
 
 import csv
@@ -27,6 +28,7 @@ def load_parsed_csv(
     *,
     bank_tag: str = "unspecified",
     expense_tag: str = "uncategorized",
+    income_tag: str = "uncategorized",
     skip_duplicates: bool = True,
 ) -> int:
     """
@@ -35,8 +37,9 @@ def load_parsed_csv(
     - csv_path: path to a parsed CSV (columns: date, description, ref, currency, amount).
     - session: SQLAlchemy session (caller commits).
     - bank_tag: base tag for the asset account -> asset:{bank_tag}.
-    - expense_tag: base tag for the expense account -> expense:{expense_tag}.
-    - skip_duplicates: if True, skip rows whose ref is already stored as external_reference on an existing transaction.
+    - expense_tag: base tag for expense account (amount > 0).
+    - income_tag: base tag for income account (amount < 0).
+    - skip_duplicates: if True, skip rows whose ref is already stored.
 
     Returns the number of transactions created.
     """
@@ -66,18 +69,26 @@ def load_parsed_csv(
             bank = account_services.upsert_account(
                 session, AccountType.ASSET, bank_tag
             )
-            expense = account_services.upsert_account(
-                session, AccountType.EXPENSE, expense_tag
-            )
 
             desc_display = f"{description}".strip()
             if len(desc_display) > 256:
                 desc_display = desc_display[:253] + "..."
 
+            if amount > 0:
+                expense = account_services.upsert_account(
+                    session, AccountType.EXPENSE, expense_tag
+                )
+                splits = [(bank.id, -amount), (expense.id, amount)]
+            else:
+                income = account_services.upsert_account(
+                    session, AccountType.INCOME, income_tag
+                )
+                splits = [(bank.id, -amount), (income.id, amount)]
+
             transaction_services.create_transaction(
                 session,
                 desc_display,
-                [(bank.id, -amount), (expense.id, amount)],
+                splits,
                 timestamp=ts,
                 external_reference=ref,
                 currency=currency,
@@ -88,7 +99,8 @@ def load_parsed_csv(
 
 
 def main() -> None:
-    """CLI: load one or more parsed CSVs into the ledger."""
+    """CLI: load parsed CSVs from directory subdirs into the ledger."""
+
     import argparse
     import sys
 
@@ -102,46 +114,57 @@ def main() -> None:
         description="Load parsed statement CSVs (from parsers.parse) into the ledger"
     )
     parser.add_argument(
-        "csv_paths",
+        "dir",
         type=Path,
-        help="Parsed CSV file(s)",
-    )
-    parser.add_argument(
-        "--bank",
-        default="unspecified",
-        help="Bank account base tag (default: unspecified)",
+        nargs="?",
+        default=Path("parsers/out/post"),
+        help="Directory with subdirs (default: parsers/out/post). Each subdir/*.csv uses bank=subdir",
     )
     parser.add_argument(
         "--expense",
         default="uncategorized",
-        help="Expense account base tag (default: uncategorized)",
+        help="Expense account tag for outflows (default: uncategorized)",
+    )
+    parser.add_argument(
+        "--income",
+        default="uncategorized",
+        help="Income account tag for inflows (default: uncategorized)",
     )
     parser.add_argument(
         "--no-skip-dup",
         action="store_true",
-        help="Do not skip duplicate (date, description, amount) rows",
+        help="Do not skip duplicate rows",
     )
     args = parser.parse_args()
 
-    csv_paths = sorted(args.csv_paths.parent.glob(args.csv_paths.name))
-    if not csv_paths:
-        print("No CSV files found.", file=sys.stderr)
+    root = args.dir.resolve()
+    if not root.is_dir():
+        print(f"Error: {root} is not a directory", file=sys.stderr)
+        sys.exit(1)
+
+    subdirs = sorted(d for d in root.iterdir() if d.is_dir())
+    if not subdirs:
+        print("No subdirectories found.", file=sys.stderr)
         sys.exit(1)
 
     init_db()
     session = get_session()
     try:
         total = 0
-        for csv_path in csv_paths:
-            n = load_parsed_csv(
-                csv_path,
-                session,
-                bank_tag=args.bank,
-                expense_tag=args.expense,
-                skip_duplicates=not args.no_skip_dup,
-            )
-            total += n
-            print(f"{csv_path.name}: {n} transaction(s)")
+        for subdir in subdirs:
+            bank_tag = subdir.name
+            csv_paths = sorted(subdir.glob("*.csv"))
+            for csv_path in csv_paths:
+                n = load_parsed_csv(
+                    csv_path,
+                    session,
+                    bank_tag=bank_tag,
+                    expense_tag=args.expense,
+                    income_tag=args.income,
+                    skip_duplicates=not args.no_skip_dup,
+                )
+                total += n
+                print(f"{bank_tag}/{csv_path.name}: {n} transaction(s)")
         session.commit()
         print(f"Total: {total} transaction(s) loaded.")
     except Exception as e:
